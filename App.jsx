@@ -667,105 +667,120 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
   );
 
   return (
-    <div className="fadeUp" style={{ flex:1, overflow:"auto", padding:16 }}>
-      {/* Show venue context automatically — pulled from valet side */}
-      {venue && (
-        <div style={{ textAlign:"center", padding:"28px 0 20px" }}>
-          <svg width="72" height="72" viewBox="0 0 42 42" fill="none" style={{ display:"block", margin:"0 auto 12px" }}>
-            <circle cx="21" cy="21" r="20" stroke={venue.color} strokeWidth="1.5" fill={`${venue.color}18`}/>
-            <text x="21" y="27" textAnchor="middle" fill={venue.color} fontSize={venue.initials.length>1?"10":"15"} fontFamily="Georgia,serif" fontWeight="bold">{venue.initials}</text>
-          </svg>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:6 }}>
-            <div style={{ height:1, width:28, background:venue.color, opacity:.4 }}/><div style={{ width:4, height:4, background:venue.color, borderRadius:"50%", opacity:.6 }}/><div style={{ height:1, width:28, background:venue.color, opacity:.4 }}/>
-          </div>
-          <div style={{ fontFamily:"Georgia,serif", fontSize:22, color:TEXT, letterSpacing:1 }}>{venue.name}</div>
-          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:4, letterSpacing:1 }}>{venue.location}</div>
-        </div>
-      )}
-
-      <div style={{ marginBottom:16 }}>
-        <div style={{ fontFamily:"Georgia,serif", fontSize:21 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
-          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM }}>Plate: <span style={{ color:GOLD, letterSpacing:2 }}>{user.plate.toUpperCase()}</span></div>
-          {car
-            ? <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, background:`${GREEN}20`, color:GREEN, border:`1px solid ${GREEN}40`, borderRadius:6, padding:"2px 7px" }}>✓ LINKED</div>
-            : <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, border:`1px solid ${BORDER}`, borderRadius:6, padding:"2px 7px" }}>NOT CHECKED IN YET</div>
-          }
-        </div>
-      </div>
+    <div className="fadeUp" style={{ flex:1, overflow:"auto", display:"flex", flexDirection:"column" }}>
 
       {car && car.status!==STATUS.DONE && car.status!==STATUS.READY ? (
-        <div style={{ background:SURF, border:`1px solid ${car.status===STATUS.REQUESTED?AMBER+"55":BORDER}`, borderRadius:16, overflow:"hidden", marginBottom:18 }}>
-          <div style={{ background:venue?.color||GOLD, padding:"12px 18px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#fff", letterSpacing:2, opacity:.8 }}>YOUR CAR</div>
-            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:20, fontWeight:700, color:"#fff", letterSpacing:3 }}>{car.plate}</div>
+        /* CAR IS PARKED — show venue + car card */
+        <div style={{ padding:16 }}>
+          {venue && (
+            <div style={{ textAlign:"center", padding:"28px 0 20px" }}>
+              <svg width="72" height="72" viewBox="0 0 42 42" fill="none" style={{ display:"block", margin:"0 auto 12px" }}>
+                <circle cx="21" cy="21" r="20" stroke={venue.color} strokeWidth="1.5" fill={`${venue.color}18`}/>
+                <text x="21" y="27" textAnchor="middle" fill={venue.color} fontSize={venue.initials.length>1?"10":"15"} fontFamily="Georgia,serif" fontWeight="bold">{venue.initials}</text>
+              </svg>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginBottom:6 }}>
+                <div style={{ height:1, width:28, background:venue.color, opacity:.4 }}/><div style={{ width:4, height:4, background:venue.color, borderRadius:"50%", opacity:.6 }}/><div style={{ height:1, width:28, background:venue.color, opacity:.4 }}/>
+              </div>
+              <div style={{ fontFamily:"Georgia,serif", fontSize:22, color:TEXT, letterSpacing:1 }}>{venue.name}</div>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:4, letterSpacing:1 }}>{venue.location}</div>
+            </div>
+          )}
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontFamily:"Georgia,serif", fontSize:21 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM }}>Plate: <span style={{ color:GOLD, letterSpacing:2 }}>{user.plate.toUpperCase()}</span></div>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, background:`${GREEN}20`, color:GREEN, border:`1px solid ${GREEN}40`, borderRadius:6, padding:"2px 7px" }}>✓ LINKED</div>
+            </div>
           </div>
-          <div style={{ padding:"16px 18px" }}>
-            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, marginBottom:14 }}>{car.color} {car.make} · Arrived {car.time}</div>
-            <div style={{ display:"flex", alignItems:"center", gap:12, background:CARD, borderRadius:10, padding:"14px 16px", marginBottom:14 }}>
-              <div style={{ width:10, height:10, borderRadius:"50%", background:sm.color, flexShrink:0, boxShadow:`0 0 8px ${sm.color}60` }}/>
-              <div>
-                <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:sm.color }}>{sm.label}</div>
-                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>
-                  {car.status===STATUS.PARKED&&"Your car is safely parked"}
-                  {car.status===STATUS.REQUESTED&&"Valet notified — heading to your car"}
-                  {car.status===STATUS.ENROUTE&&"Your car is on its way out"}
+          <div style={{ background:SURF, border:`1px solid ${car.status===STATUS.REQUESTED?AMBER+"55":BORDER}`, borderRadius:16, overflow:"hidden", marginBottom:18 }}>
+            <div style={{ background:venue?.color||GOLD, padding:"12px 18px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#fff", letterSpacing:2, opacity:.8 }}>YOUR CAR</div>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:20, fontWeight:700, color:"#fff", letterSpacing:3 }}>{car.plate}</div>
+            </div>
+            <div style={{ padding:"16px 18px" }}>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, marginBottom:14 }}>{car.color} {car.make} · Arrived {car.time}</div>
+              <div style={{ display:"flex", alignItems:"center", gap:12, background:CARD, borderRadius:10, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ width:10, height:10, borderRadius:"50%", background:sm.color, flexShrink:0, boxShadow:`0 0 8px ${sm.color}60` }}/>
+                <div>
+                  <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:sm.color }}>{sm.label}</div>
+                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>
+                    {car.status===STATUS.PARKED&&"Your car is safely parked"}
+                    {car.status===STATUS.REQUESTED&&"Valet notified — heading to your car"}
+                    {car.status===STATUS.ENROUTE&&"Your car is on its way out"}
+                  </div>
                 </div>
               </div>
+              {car.status===STATUS.PARKED ? (
+                <button className="btn" onClick={handleRequestWithBiometrics} style={{ width:"100%", padding:15, borderRadius:11, fontSize:16, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, boxShadow:`0 4px 20px ${GOLD}30` }}>
+                  I'm heading out — bring my car
+                </button>
+              ) : (
+                <div style={{ textAlign:"center", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, padding:"8px 0" }}>Request sent ✓</div>
+              )}
             </div>
-            {car.status===STATUS.PARKED ? (
-              <button className="btn" onClick={handleRequestWithBiometrics} style={{ width:"100%", padding:15, borderRadius:11, fontSize:16, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, boxShadow:`0 4px 20px ${GOLD}30` }}>
-                I'm heading out — bring my car
-              </button>
-            ) : (
-              <div style={{ textAlign:"center", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, padding:"8px 0" }}>Request sent ✓</div>
-            )}
           </div>
         </div>
       ) : !car ? (
-        <>
-          <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"22px 18px", textAlign:"center", marginBottom:18 }}>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:DIM, margin:"0 auto 12px", opacity:.4 }}/>
-            <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:GOLD, marginBottom:6 }}>No car checked in yet</div>
+        /* NO CAR — centered welcome screen */
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 24px", textAlign:"center" }}>
+
+          {/* P Crest */}
+          <svg width="72" height="72" viewBox="0 0 42 42" fill="none" style={{ marginBottom:12 }}>
+            <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
+            <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
+          </svg>
+
+          {/* Divider */}
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
+            <div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/><div style={{ width:4, height:4, background:GOLD, borderRadius:"50%", opacity:.6 }}/><div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/>
+          </div>
+
+          {/* PORTIER */}
+          <div style={{ fontFamily:"Georgia,serif", fontSize:28, fontWeight:"bold", letterSpacing:8, color:GOLD, marginBottom:6 }}>PORTIER</div>
+
+          {/* Divider */}
+          <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+            <div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/><div style={{ width:4, height:4, background:GOLD, transform:"rotate(45deg)", opacity:.6 }}/><div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/>
+          </div>
+
+          {/* Good evening */}
+          <div style={{ fontFamily:"Georgia,serif", fontSize:20, color:TEXT, marginBottom:4 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:28 }}>
+            Plate: <span style={{ color:GOLD, letterSpacing:2 }}>{user.plate.toUpperCase()}</span>
+            <span style={{ marginLeft:8, background:`${BORDER}`, border:`1px solid ${BORDER}`, borderRadius:4, padding:"1px 6px" }}>NOT CHECKED IN YET</span>
+          </div>
+
+          {/* No car card */}
+          <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"20px 18px", marginBottom:28, width:"100%", maxWidth:340 }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:DIM, margin:"0 auto 10px", opacity:.4 }}/>
+            <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:GOLD, marginBottom:6 }}>No car checked in yet</div>
             <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, lineHeight:1.6 }}>
               Hand your keys to the valet.<br/>
               Your plate <span style={{ color:GOLD, letterSpacing:1 }}>{user.plate.toUpperCase()}</span> links automatically.
             </div>
           </div>
 
-          {/* Tonight's details */}
-          <div style={{ width:"100%", display:"flex", flexDirection:"column", alignItems:"center", gap:0, paddingTop:8 }}>
+          {/* Date */}
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:3, marginBottom:10, textTransform:"uppercase" }}>{today()}</div>
 
-            {/* Gold divider */}
-            <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
-              <div style={{ height:1, width:40, background:GOLD, opacity:.3 }}/>
-              <div style={{ width:4, height:4, background:GOLD, borderRadius:"50%", opacity:.5 }}/>
-              <div style={{ height:1, width:40, background:GOLD, opacity:.3 }}/>
-            </div>
-
-            {/* Date */}
-            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:3, marginBottom:8, textTransform:"uppercase" }}>{today()}</div>
-
-            <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:DIM, fontStyle:"italic", letterSpacing:.5, marginBottom:32, textAlign:"center", lineHeight:1.8 }}>
-              When you're ready to leave<br/>
-              tap the button and your car will be outside.
-            </div>
-
-            {/* Quote */}
-            <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"20px 22px", textAlign:"center", marginBottom:20 }}>
-              <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:DIM, fontStyle:"italic", lineHeight:1.8, letterSpacing:.3 }}>
-                "The finest things in life arrive<br/>exactly when they should."
-              </div>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginTop:14 }}>
-                <div style={{ height:1, width:24, background:GOLD, opacity:.3 }}/>
-                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:8, color:DIM, letterSpacing:2 }}>PORTIER</div>
-                <div style={{ height:1, width:24, background:GOLD, opacity:.3 }}/>
-              </div>
-            </div>
-
-
+          {/* Message */}
+          <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:DIM, fontStyle:"italic", lineHeight:1.8, marginBottom:28 }}>
+            When you're ready to leave<br/>tap the button and your car will be outside.
           </div>
-        </>
+
+          {/* Quote */}
+          <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"18px 22px", width:"100%", maxWidth:340 }}>
+            <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:DIM, fontStyle:"italic", lineHeight:1.8 }}>
+              "The finest things in life arrive<br/>exactly when they should."
+            </div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:10, marginTop:12 }}>
+              <div style={{ height:1, width:24, background:GOLD, opacity:.3 }}/>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:8, color:DIM, letterSpacing:2 }}>PORTIER</div>
+              <div style={{ height:1, width:24, background:GOLD, opacity:.3 }}/>
+            </div>
+          </div>
+
+        </div>
       ) : null}
     </div>
   );
