@@ -237,8 +237,21 @@ export default function App() {
       tip: null, rating: null,
       customer_name: matched ? `${custUser.first} ${custUser.last}` : null,
     };
-    const { error } = await supabase.from("lots").upsert(record, { onConflict: "venue_id,plate" });
-    if (error) { setVError("DB error: " + error.message); return; }
+    try {
+      // First try delete existing, then insert fresh
+      await supabase.from("lots").delete().eq("venue_id", valetVenue.id).eq("plate", plate);
+      const { data, error } = await supabase.from("lots").insert([record]).select();
+      if (error) {
+        console.error("Supabase insert error:", error);
+        setVError("DB error: " + error.message);
+        return;
+      }
+      console.log("Parked successfully:", data);
+    } catch(e) {
+      console.error("Network error:", e);
+      setVError("Network error — check connection");
+      return;
+    }
     setVForm({ plate:"", make:"", color:"", location:"", box:"" });
     setVError(""); setBoxSearch(""); setShowBoxPicker(false);
     flash(`Parked · Box ${vForm.box}${matched ? ` · ${custUser.first} ${custUser.last}` : ""}`);
