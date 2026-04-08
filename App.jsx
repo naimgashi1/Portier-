@@ -1,23 +1,9 @@
 // Portier by NG Technologies LLC — v2 Multi-Venue
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = "https://yvxsmrsmurkxierjjhfp.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2eHNtcnNtdXJreGllcmpqaGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NjM3ODcsImV4cCI6MjA5MTIzOTc4N30.gzFkyo-neUh2UMwpikdDVWt0lktq_MkJ_JuRy_Swv4c";
-
-// Initialize supabase client — loaded via CDN in index.html for production
-// For artifact preview, we use a mock that falls back gracefully
-const supabase = (() => {
-  if (typeof window !== "undefined" && window.supabase) {
-    return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-  }
-  // Fallback mock for artifact preview — app still works locally
-  const noop = () => Promise.resolve({ data: [], error: null });
-  const chain = { eq: () => chain, update: () => chain, upsert: noop, select: noop, then: (fn) => fn({ data: [], error: null }) };
-  return {
-    from: () => ({ select: noop, upsert: noop, update: () => chain, delete: () => chain }),
-    channel: () => ({ on: () => ({ subscribe: () => {} }) }),
-    removeChannel: () => {}
-  };
-})();
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const GOLD   = "#C8A96E";
 const GOLD2  = "rgba(200,169,110,0.12)";
