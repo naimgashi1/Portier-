@@ -5,6 +5,26 @@ const SUPABASE_URL = "https://yvxsmrsmurkxierjjhfp.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2eHNtcnNtdXJreGllcmpqaGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NjM3ODcsImV4cCI6MjA5MTIzOTc4N30.gzFkyo-neUh2UMwpikdDVWt0lktq_MkJ_JuRy_Swv4c";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// Push notification helper
+function sendNotif(title, body) {
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.showNotification(title, { body, icon:"/icon-192.png", vibrate:[200,100,200] });
+      });
+    } else {
+      new Notification(title, { body, icon:"/icon-192.png" });
+    }
+  }
+}
+
+async function requestNotifPermission() {
+  if ("Notification" in window && Notification.permission === "default") {
+    await Notification.requestPermission();
+  }
+}
+
 const GOLD   = "#C8A96E";
 const GOLD2  = "rgba(200,169,110,0.12)";
 const GOLD3  = "rgba(200,169,110,0.25)";
@@ -76,6 +96,9 @@ function VenueBadge({ venue, onPress }) {
 export default function App() {
   const [side, setSide] = useState("customer");
 
+  // Request notification permission on load
+  useEffect(() => { requestNotifPermission(); }, []);
+
   // Shared lot — keyed by venueId → plate → car
   const [lots, setLots] = useState({});
   const [dbReady, setDbReady] = useState(false);
@@ -117,6 +140,15 @@ export default function App() {
             });
           } else {
             const row = payload.new;
+            // Notify guest if their car status changed
+            if (custUser && row.plate === normPlate(custUser.plate)) {
+              if (row.status === "ready") sendNotif("🚗 Your car is outside!", "Pull up to the entrance — your car is waiting.");
+              if (row.status === "enroute") sendNotif("🔑 Your car is on the way!", "Your valet is bringing your car out now.");
+            }
+            // Notify valet if a guest requested their car
+            if (valetVenue && row.venue_id === valetVenue.id && row.status === "requested") {
+              sendNotif("🔔 Guest heading out!", `${row.plate} — ${row.customer_name || "Guest"} is ready.`);
+            }
             setLots(prev => ({
               ...prev,
               [row.venue_id]: {
@@ -557,39 +589,9 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
   const venue  = custCar?.venue;
   const sm     = car ? SMETA[car.status] : null;
   const isReady= car?.status === STATUS.READY;
-  const [bioState, setBioState] = useState("idle"); // idle | scanning | denied
 
-  async function handleRequestWithBiometrics() {
-    setBioState("scanning");
-    try {
-      // Use WebAuthn / device biometrics (Face ID on iPhone, fingerprint on Android)
-      if (window.PublicKeyCredential) {
-        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-        if (available) {
-          // Trigger Face ID / Touch ID via WebAuthn
-          const cred = await navigator.credentials.get({
-            publicKey: {
-              challenge: new Uint8Array(32),
-              rpId: window.location.hostname || "localhost",
-              userVerification: "required",
-              timeout: 30000,
-            }
-          }).catch(() => null);
-          if (cred) {
-            setBioState("idle");
-            onRequest();
-            return;
-          }
-        }
-      }
-      // Fallback — if biometrics not available or fail, still allow (prototype mode)
-      setBioState("idle");
-      onRequest();
-    } catch(e) {
-      // On prototype/browser — just proceed
-      setBioState("idle");
-      onRequest();
-    }
+  function handleRequestWithBiometrics() {
+    onRequest();
   }
 
   if (screen==="tip") return (
@@ -700,9 +702,8 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               </div>
             </div>
             {car.status===STATUS.PARKED ? (
-              <button className="btn" onClick={handleRequestWithBiometrics} style={{ width:"100%", padding:15, borderRadius:11, fontSize:16, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, boxShadow:`0 4px 20px ${GOLD}30`, display:"flex", alignItems:"center", justifyContent:"center", gap:10 }}>
-                <span style={{ fontSize:20 }}>{bioState==="scanning" ? "⏳" : "🔒"}</span>
-                <span>{bioState==="scanning" ? "Verifying..." : "I'm heading out — bring my car"}</span>
+              <button className="btn" onClick={handleRequestWithBiometrics} style={{ width:"100%", padding:15, borderRadius:11, fontSize:16, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, boxShadow:`0 4px 20px ${GOLD}30` }}>
+                I'm heading out — bring my car
               </button>
             ) : (
               <div style={{ textAlign:"center", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, padding:"8px 0" }}>Request sent ✓</div>
