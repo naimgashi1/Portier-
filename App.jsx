@@ -65,9 +65,14 @@ function now()        { return new Date().toLocaleTimeString("en-US",{hour:"nume
 function today()      { return new Date().toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function normPlate(p) { return p.replace(/[^A-Z0-9]/gi,"").toUpperCase(); }
 
-function PortierHeader() {
+function PortierHeader({ onLongPress }) {
+  const pressTimer = useRef(null);
+  function startPress() { pressTimer.current = setTimeout(() => onLongPress && onLongPress(), 1500); }
+  function endPress() { clearTimeout(pressTimer.current); }
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+    <div style={{ display:"flex", alignItems:"center", gap:8 }}
+      onMouseDown={startPress} onMouseUp={endPress} onMouseLeave={endPress}
+      onTouchStart={startPress} onTouchEnd={endPress}>
       <svg width="22" height="22" viewBox="0 0 42 42" fill="none">
         <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
         <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
@@ -180,7 +185,12 @@ export default function App() {
   const [tipAmt, setTipAmt] = useState(null);
 
   // Customer — simple: name + plate, NO venue selection
-  const [custUser, setCustUser] = useState(null);
+  const [custUser, setCustUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("portier_guest");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [custScreen, setCustScreen] = useState("home");
   const [tipPick, setTipPick] = useState(null);
   const [stars, setStars] = useState(0);
@@ -323,17 +333,10 @@ export default function App() {
 
       {/* Header */}
       <div style={{ background:SURF, borderBottom:`1px solid ${BORDER}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:50 }}>
-        <PortierHeader />
+        <PortierHeader onLongPress={()=>setSide(s=>s==="customer"?"valet":"customer")} />
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 }}>
-          <div style={{ display:"flex", background:BG, borderRadius:8, padding:3, border:`1px solid ${BORDER}`, gap:2 }}>
-            {[["customer","Guest"],["valet","Valet"]].map(([s,l])=>(
-              <button key={s} className="btn" onClick={()=>setSide(s)} style={{
-                padding:"5px 12px", borderRadius:6, fontSize:11,
-                fontFamily:"'IBM Plex Mono',monospace",
-                background:side===s ? GOLD : "transparent",
-                color:side===s ? BG : DIM, fontWeight:side===s ? 600 : 400,
-              }}>{l}</button>
-            ))}
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:2, padding:"5px 8px" }}>
+            {side === "customer" ? "GUEST" : "VALET"}
           </div>
           {pendingCount>0 && side==="valet" && (
             <div className="blink" style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:AMBER, letterSpacing:1 }}>● {pendingCount} PENDING</div>
@@ -549,8 +552,17 @@ export default function App() {
 }
 
 function CustomerRegister({ onRegister }) {
-  const [reg, setReg] = useState({ first:"", last:"", plate:"" });
+  const [reg, setReg] = useState(() => {
+    try {
+      const saved = localStorage.getItem("portier_guest");
+      return saved ? JSON.parse(saved) : { first:"", last:"", plate:"" };
+    } catch { return { first:"", last:"", plate:"" }; }
+  });
   const ready = reg.first && reg.last && reg.plate;
+  function handleRegister(r) {
+    try { localStorage.setItem("portier_guest", JSON.stringify(r)); } catch {}
+    onRegister(r);
+  }
   return (
     <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:28 }}>
       <div style={{ width:"100%", maxWidth:340 }}>
@@ -573,12 +585,12 @@ function CustomerRegister({ onRegister }) {
               style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:10, padding:"13px 16px", color:TEXT, fontSize:15, fontFamily:"Georgia,serif", width:"100%", outline:"none" }}/>
           ))}
           <div>
-            <input placeholder="License Plate  (e.g. ABC1234)" value={reg.plate} onChange={e=>setReg(p=>({...p,plate:e.target.value.toUpperCase()}))}
+            <input placeholder="Plate Number  (e.g. ABC1234)" value={reg.plate} onChange={e=>setReg(p=>({...p,plate:e.target.value.toUpperCase()}))}
               style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:10, padding:"13px 16px", color:TEXT, fontSize:15, fontFamily:"'IBM Plex Mono',monospace", letterSpacing:2, width:"100%", textTransform:"uppercase", outline:"none" }}/>
             <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:5, paddingLeft:2, letterSpacing:.5 }}>Your plate links your car — no ticket needed</div>
           </div>
         </div>
-        <button className="btn" onClick={()=>{ if(ready) onRegister(reg); }} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready?GOLD:FAINT, color:ready?BG:DIM, fontWeight:600 }}>Get Started</button>
+        <button className="btn" onClick={()=>{ if(ready) handleRegister(reg); }} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready?GOLD:FAINT, color:ready?BG:DIM, fontWeight:600 }}>Enter Experience</button>
       </div>
     </div>
   );
