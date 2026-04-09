@@ -608,8 +608,22 @@ export default function App() {
       <div style={{ background:SURF, borderBottom:`1px solid ${BORDER}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:50 }}>
         <PortierHeader onLongPress={()=>{ setShowAdminPin(true); setAdminPinInput(""); setAdminPinError(false); }} />
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 }}>
-          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:2, padding:"5px 8px" }}>
-            {side === "customer" ? "GUEST" : valetEmployee ? valetEmployee.name.split(" ")[0].toUpperCase() : "VALET"}
+          <div style={{ display:"flex", background:BG, borderRadius:8, padding:3, border:`1px solid ${BORDER}`, gap:2 }}>
+            <button className="btn" onClick={()=>setSide("customer")} style={{
+              padding:"5px 12px", borderRadius:6, fontSize:11,
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:side==="customer" ? GOLD : "transparent",
+              color:side==="customer" ? BG : DIM, fontWeight:side==="customer" ? 600 : 400,
+            }}>Guest</button>
+            <button className="btn" onClick={()=>{
+              if(side!=="valet") { setValetLoginScreen(true); setValetPinInput(""); setValetPinError(false); setSelectedEmployee(null); }
+              setSide("valet");
+            }} style={{
+              padding:"5px 12px", borderRadius:6, fontSize:11,
+              fontFamily:"'IBM Plex Mono',monospace",
+              background:side==="valet" ? GOLD : "transparent",
+              color:side==="valet" ? BG : DIM, fontWeight:side==="valet" ? 600 : 400,
+            }}>{side==="valet" && valetEmployee ? valetEmployee.name.split(" ")[0] : "Valet"}</button>
           </div>
           {pendingCount>0 && side==="valet" && (
             <div className="blink" style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:AMBER, letterSpacing:1 }}>● {pendingCount} PENDING</div>
