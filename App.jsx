@@ -36,12 +36,14 @@ const SURF   = "#111009";
 const CARD   = "#181510";
 const BORDER = "#272318";
 const PURPLE = "#4A1F8A";
+const ADMIN_PIN = "2604"; // Naim's admin PIN — change this
 const GREEN  = "#4A9E6E";
 const AMBER  = "#D4853A";
 const BLUE   = "#4A88B8";
 const RED    = "#B85A5A";
 
-const VENUES = [
+// Venues loaded dynamically from Supabase — fallback to these defaults
+const DEFAULT_VENUES = [
   { id:"rp-prime",       name:"RP Prime Steak & Seafood",    short:"RP Prime",        location:"Mahwah, New Jersey",       initials:"RP", color:"#C8A96E" },
   { id:"capital-grille", name:"The Capital Grille",           short:"Capital Grille",  location:"Paramus, New Jersey",      initials:"CG", color:"#8B6914" },
   { id:"mortons",        name:"Morton's The Steakhouse",      short:"Morton's",        location:"Hackensack, New Jersey",   initials:"M",  color:"#1B3A4B" },
@@ -98,8 +100,204 @@ function VenueBadge({ venue, onPress }) {
   );
 }
 
+
+function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, valetEmployees, setValetEmployees, onExit }) {
+  const [tab, setTab] = useState("venues");
+  const [flash, setFlash] = useState("");
+  
+  // Venue form
+  const [vForm, setVForm] = useState({ name:"", short:"", location:"", initials:"", color:"#C8A96E" });
+  // Company form
+  const [cForm, setCForm] = useState({ name:"" });
+  // Employee form
+  const [eForm, setEForm] = useState({ name:"", company_id:"", pin:"" });
+
+  function showFlash(msg) {
+    setFlash(msg);
+    setTimeout(() => setFlash(""), 2500);
+  }
+
+  async function addVenue() {
+    if (!vForm.name || !vForm.initials) return;
+    const id = vForm.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
+    const record = { id, name:vForm.name, short:vForm.short||vForm.name, location:vForm.location, initials:vForm.initials.toUpperCase().slice(0,2), color:vForm.color, active:true };
+    const { error } = await supabase.from("venues").insert([record]);
+    if (error) { showFlash("Error: " + error.message); return; }
+    setVenues(p => [...p, record]);
+    setVForm({ name:"", short:"", location:"", initials:"", color:"#C8A96E" });
+    showFlash("✓ Restaurant added");
+  }
+
+  async function toggleVenue(id, active) {
+    await supabase.from("venues").update({ active: !active }).eq("id", id);
+    setVenues(p => p.map(v => v.id===id ? {...v, active:!active} : v));
+  }
+
+  async function addCompany() {
+    if (!cForm.name) return;
+    const { data, error } = await supabase.from("valet_companies").insert([{ name:cForm.name }]).select();
+    if (error) { showFlash("Error: " + error.message); return; }
+    setValetCompanies(p => [...p, data[0]]);
+    setCForm({ name:"" });
+    showFlash("✓ Company added");
+  }
+
+  async function addEmployee() {
+    if (!eForm.name || !eForm.pin || eForm.pin.length !== 4) { showFlash("Name + 4-digit PIN required"); return; }
+    const { data, error } = await supabase.from("valet_employees").insert([{ name:eForm.name, company_id:eForm.company_id||null, pin:eForm.pin }]).select();
+    if (error) { showFlash("Error: " + error.message); return; }
+    setValetEmployees(p => [...p, data[0]]);
+    setEForm({ name:"", company_id:"", pin:"" });
+    showFlash("✓ Employee added");
+  }
+
+  async function removeEmployee(id) {
+    await supabase.from("valet_employees").update({ active:false }).eq("id", id);
+    setValetEmployees(p => p.filter(e => e.id !== id));
+  }
+
+  const inputStyle = { background:SURF, border:`1px solid ${BORDER}`, borderRadius:10, padding:"12px 14px", color:TEXT, fontSize:14, fontFamily:"Georgia,serif", width:"100%", outline:"none" };
+  const labelStyle = { fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:6, display:"block" };
+
+  return (
+    <div style={{ fontFamily:"Georgia,serif", background:BG, minHeight:"100vh", color:TEXT, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto" }}>
+      {/* Header */}
+      <div style={{ background:SURF, borderBottom:`1px solid ${BORDER}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <svg width="20" height="20" viewBox="0 0 42 42" fill="none">
+            <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
+            <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
+          </svg>
+          <div style={{ fontFamily:"Georgia,serif", fontSize:16, fontWeight:"bold", letterSpacing:4, color:GOLD }}>ADMIN</div>
+        </div>
+        <button className="btn" onClick={onExit} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:1 }}>EXIT</button>
+      </div>
+
+      {/* Flash */}
+      {flash && <div style={{ background:GREEN, color:"#fff", padding:"10px 16px", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, textAlign:"center" }}>{flash}</div>}
+
+      {/* Tabs */}
+      <div style={{ display:"flex", background:CARD, borderBottom:`1px solid ${BORDER}` }}>
+        {[["venues","Restaurants"],["companies","Companies"],["employees","Employees"]].map(([t,l]) => (
+          <button key={t} className="btn" onClick={()=>setTab(t)} style={{
+            flex:1, padding:"12px 0", fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1,
+            color: tab===t ? GOLD : DIM,
+            borderBottom: tab===t ? `2px solid ${GOLD}` : "2px solid transparent"
+          }}>{l.toUpperCase()}</button>
+        ))}
+      </div>
+
+      <div style={{ flex:1, overflow:"auto", padding:16 }}>
+
+        {/* RESTAURANTS TAB */}
+        {tab==="venues" && <>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD RESTAURANT</div>
+          <div style={{ display:"grid", gap:10, marginBottom:8 }}>
+            <div><label style={labelStyle}>RESTAURANT NAME</label><input placeholder="e.g. Nobu Fifty Seven" value={vForm.name} onChange={e=>setVForm(p=>({...p,name:e.target.value}))} style={inputStyle}/></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div><label style={labelStyle}>SHORT NAME</label><input placeholder="e.g. Nobu NYC" value={vForm.short} onChange={e=>setVForm(p=>({...p,short:e.target.value}))} style={inputStyle}/></div>
+              <div><label style={labelStyle}>INITIALS (2 letters)</label><input placeholder="e.g. NB" maxLength={2} value={vForm.initials} onChange={e=>setVForm(p=>({...p,initials:e.target.value.toUpperCase()}))} style={inputStyle}/></div>
+            </div>
+            <div><label style={labelStyle}>LOCATION</label><input placeholder="e.g. New York, New York" value={vForm.location} onChange={e=>setVForm(p=>({...p,location:e.target.value}))} style={inputStyle}/></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, alignItems:"end" }}>
+              <div><label style={labelStyle}>BRAND COLOR</label><input type="color" value={vForm.color} onChange={e=>setVForm(p=>({...p,color:e.target.value}))} style={{ ...inputStyle, padding:6, height:44, cursor:"pointer" }}/></div>
+              <div style={{ width:44, height:44, borderRadius:10, background:vForm.color, border:`1px solid ${BORDER}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontFamily:"Georgia,serif", fontSize:14, fontWeight:"bold", color:"#fff", textShadow:"0 1px 2px rgba(0,0,0,0.5)" }}>{vForm.initials||"?"}</span>
+              </div>
+            </div>
+          </div>
+          <button className="btn" onClick={addVenue} style={{ width:"100%", padding:13, borderRadius:10, fontSize:14, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, marginBottom:24 }}>+ Add Restaurant</button>
+
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:12 }}>ALL RESTAURANTS ({venues.length})</div>
+          <div style={{ display:"grid", gap:10 }}>
+            {venues.map(v => (
+              <div key={v.id} style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:"13px 15px", display:"flex", alignItems:"center", gap:12 }}>
+                <svg width="36" height="36" viewBox="0 0 42 42" fill="none">
+                  <circle cx="21" cy="21" r="20" stroke={v.color} strokeWidth="1.5" fill={`${v.color}15`}/>
+                  <text x="21" y="27" textAnchor="middle" fill={v.color} fontSize={v.initials?.length>1?"10":"14"} fontFamily="Georgia,serif" fontWeight="bold">{v.initials}</text>
+                </svg>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>{v.name}</div>
+                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:2 }}>{v.location}</div>
+                </div>
+                <button className="btn" onClick={()=>toggleVenue(v.id, v.active)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color: v.active!==false ? GREEN : RED, border:`1px solid ${v.active!==false ? GREEN+"40" : RED+"40"}`, borderRadius:6, padding:"3px 8px" }}>
+                  {v.active!==false ? "ACTIVE" : "INACTIVE"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* COMPANIES TAB */}
+        {tab==="companies" && <>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD VALET COMPANY</div>
+          <div style={{ display:"grid", gap:10, marginBottom:8 }}>
+            <div><label style={labelStyle}>COMPANY NAME</label><input placeholder="e.g. Premier Valet Services" value={cForm.name} onChange={e=>setCForm(p=>({...p,name:e.target.value}))} style={inputStyle}/></div>
+          </div>
+          <button className="btn" onClick={addCompany} style={{ width:"100%", padding:13, borderRadius:10, fontSize:14, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, marginBottom:24 }}>+ Add Company</button>
+
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:12 }}>ALL COMPANIES ({valetCompanies.length})</div>
+          {valetCompanies.length === 0 && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, textAlign:"center", padding:"20px 0" }}>No companies yet</div>}
+          <div style={{ display:"grid", gap:10 }}>
+            {valetCompanies.map(c => (
+              <div key={c.id} style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:"13px 15px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>{c.name}</div>
+                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>
+                  {valetEmployees.filter(e=>e.company_id===c.id).length} valets
+                </div>
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* EMPLOYEES TAB */}
+        {tab==="employees" && <>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD VALET EMPLOYEE</div>
+          <div style={{ display:"grid", gap:10, marginBottom:8 }}>
+            <div><label style={labelStyle}>FULL NAME</label><input placeholder="e.g. Carlos Rivera" value={eForm.name} onChange={e=>setEForm(p=>({...p,name:e.target.value}))} style={inputStyle}/></div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+              <div>
+                <label style={labelStyle}>COMPANY</label>
+                <select value={eForm.company_id} onChange={e=>setEForm(p=>({...p,company_id:e.target.value}))} style={{...inputStyle, appearance:"none"}}>
+                  <option value="">No company</option>
+                  {valetCompanies.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div><label style={labelStyle}>4-DIGIT PIN</label><input placeholder="e.g. 1234" maxLength={4} type="password" value={eForm.pin} onChange={e=>setEForm(p=>({...p,pin:e.target.value.replace(/\D/,"")}))} style={inputStyle}/></div>
+            </div>
+          </div>
+          <button className="btn" onClick={addEmployee} style={{ width:"100%", padding:13, borderRadius:10, fontSize:14, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600, marginBottom:24 }}>+ Add Employee</button>
+
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:12 }}>ALL EMPLOYEES ({valetEmployees.length})</div>
+          {valetEmployees.length === 0 && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, textAlign:"center", padding:"20px 0" }}>No employees yet</div>}
+          <div style={{ display:"grid", gap:10 }}>
+            {valetEmployees.map(e => (
+              <div key={e.id} style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:"13px 15px", display:"flex", alignItems:"center", gap:12 }}>
+                <div style={{ width:36, height:36, borderRadius:"50%", background:GOLD2, border:`1px solid ${GOLD}`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Georgia,serif", fontSize:14, color:GOLD, fontWeight:"bold" }}>
+                  {e.name.charAt(0)}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>{e.name}</div>
+                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:2 }}>
+                    {e.valet_companies?.name || "No company"} · PIN: {"•".repeat(4)}
+                  </div>
+                </div>
+                <button className="btn" onClick={()=>removeEmployee(e.id)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:RED, border:`1px solid ${RED}40`, borderRadius:6, padding:"3px 8px" }}>REMOVE</button>
+              </div>
+            ))}
+          </div>
+        </>}
+
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [side, setSide] = useState("customer");
+  const [adminPinInput, setAdminPinInput] = useState("");
+  const [adminPinError, setAdminPinError] = useState(false);
+  const [showAdminPin, setShowAdminPin] = useState(false);
 
   // Request notification permission on load
   useEffect(() => { requestNotifPermission(); }, []);
@@ -196,6 +394,23 @@ export default function App() {
   const [stars, setStars] = useState(0);
   const [hover, setHover] = useState(0);
 
+  const [venues, setVenues] = useState(DEFAULT_VENUES);
+  const [valetCompanies, setValetCompanies] = useState([]);
+  const [valetEmployees, setValetEmployees] = useState([]);
+
+  // Load venues, companies, employees from Supabase
+  useEffect(() => {
+    supabase.from("venues").select("*").eq("active", true).then(({ data }) => {
+      if (data && data.length > 0) setVenues(data);
+    });
+    supabase.from("valet_companies").select("*").eq("active", true).then(({ data }) => {
+      if (data) setValetCompanies(data);
+    });
+    supabase.from("valet_employees").select("*, valet_companies(name)").eq("active", true).then(({ data }) => {
+      if (data) setValetEmployees(data);
+    });
+  }, []);
+
   const [notif, setNotif] = useState(null);
   const notifRef = useRef();
 
@@ -229,7 +444,7 @@ export default function App() {
     const plate = normPlate(custUser.plate);
     for (const vid of Object.keys(lots)) {
       if (lots[vid][plate] && lots[vid][plate].status !== STATUS.DONE) {
-        return { car: lots[vid][plate], venue: VENUES.find(v=>v.id===vid) };
+        return { car: lots[vid][plate], venue: venues.find(v=>v.id===vid) };
       }
     }
     return null;
@@ -310,6 +525,51 @@ export default function App() {
     flash(`🔔 ${plate} — Guest heading out!`, "alert");
   }
 
+  // Admin PIN screen
+  if (showAdminPin) return (
+    <div style={{ fontFamily:"Georgia,serif", background:BG, minHeight:"100vh", color:TEXT, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", alignItems:"center", justifyContent:"center", padding:32 }}>
+      <svg width="48" height="48" viewBox="0 0 42 42" fill="none" style={{ marginBottom:16 }}>
+        <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
+        <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
+      </svg>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:22, color:GOLD, marginBottom:6, letterSpacing:4 }}>ADMIN</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, marginBottom:32, letterSpacing:1 }}>Enter admin PIN to continue</div>
+      <div style={{ display:"flex", gap:12, marginBottom:24 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{ width:18, height:18, borderRadius:"50%", background:i < adminPinInput.length ? GOLD : "transparent", border:`1.5px solid ${GOLD}`, opacity: i < adminPinInput.length ? 1 : 0.4 }}/>
+        ))}
+      </div>
+      {adminPinError && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:RED, marginBottom:16, letterSpacing:1 }}>INCORRECT PIN</div>}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:12, width:220 }}>
+        {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i) => (
+          <button key={i} className="btn" onClick={() => {
+            if (k === "⌫") { setAdminPinInput(p => p.slice(0,-1)); setAdminPinError(false); }
+            else if (k === "") return;
+            else {
+              const next = adminPinInput + k;
+              setAdminPinInput(next);
+              if (next.length === 4) {
+                if (next === ADMIN_PIN) { setShowAdminPin(false); setSide("admin"); setAdminPinInput(""); setAdminPinError(false); }
+                else { setAdminPinError(true); setAdminPinInput(""); }
+              }
+            }
+          }} style={{ height:56, borderRadius:12, fontSize:20, fontFamily:"Georgia,serif", background:k===""?"transparent":SURF, color:TEXT, border:k===""?"none":`1px solid ${BORDER}` }}>{k}</button>
+        ))}
+      </div>
+      <button className="btn" onClick={() => { setShowAdminPin(false); setAdminPinInput(""); setAdminPinError(false); }} style={{ marginTop:28, fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM }}>Cancel</button>
+    </div>
+  );
+
+  // Admin dashboard
+  if (side === "admin") return (
+    <AdminDashboard
+      venues={venues} setVenues={setVenues}
+      valetCompanies={valetCompanies} setValetCompanies={setValetCompanies}
+      valetEmployees={valetEmployees} setValetEmployees={setValetEmployees}
+      onExit={() => setSide("customer")}
+    />
+  );
+
   return (
     <div style={{ fontFamily:"Georgia,serif", background:BG, minHeight:"100vh", color:TEXT, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto" }}>
       <style>{`
@@ -333,7 +593,7 @@ export default function App() {
 
       {/* Header */}
       <div style={{ background:SURF, borderBottom:`1px solid ${BORDER}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", position:"sticky", top:0, zIndex:50 }}>
-        <PortierHeader onLongPress={()=>setSide(s=>s==="customer"?"valet":"customer")} />
+        <PortierHeader onLongPress={()=>{ setShowAdminPin(true); setAdminPinInput(""); setAdminPinError(false); }} />
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 }}>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:2, padding:"5px 8px" }}>
             {side === "customer" ? "GUEST" : "VALET"}
@@ -379,7 +639,7 @@ export default function App() {
                 <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:GOLD, marginBottom:6 }}>Select your venue</div>
                 <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:16 }}>Which property are you working tonight?</div>
                 <div style={{ display:"grid", gap:8 }}>
-                  {VENUES.map(v=>(
+                  {venues.map(v=>(
                     <button key={v.id} className="btn" onClick={()=>{ setValetVenue(v); flash(`${v.short} — shift started`); }} style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:10, padding:"12px 14px", display:"flex", alignItems:"center", gap:12, textAlign:"left" }}>
                       <svg width="32" height="32" viewBox="0 0 42 42" fill="none">
                         <circle cx="21" cy="21" r="20" stroke={v.color} strokeWidth="1.5" fill={`${v.color}18`}/>
