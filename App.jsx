@@ -1067,7 +1067,7 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
                   <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>
                     {car.status===STATUS.PARKED&&"Your car is safely parked"}
                     {car.status===STATUS.REQUESTED&&"Valet notified — heading to your car"}
-                    {car.status===STATUS.ENROUTE&&(car.valetName ? `${car.valetName.split(" ")[0]} is bringing your car out your car` : "Your car is on its way out")}
+                    {car.status===STATUS.ENROUTE&&(car.valetName ? `${car.valetName.split(" ")[0]} {car.status===STATUS.ENROUTE&&(car.valetName ? `${car.valetName.split(" ")[0]} is bringing your car out` : "Your car is on its way out")})}
                   </div>
                 </div>
               </div>
