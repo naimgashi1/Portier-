@@ -36,13 +36,12 @@ const SURF   = "#111009";
 const CARD   = "#181510";
 const BORDER = "#272318";
 const PURPLE = "#4A1F8A";
-const ADMIN_PIN = "2604"; // Naim's admin PIN — change this
+const ADMIN_PIN = "2604";
 const GREEN  = "#4A9E6E";
 const AMBER  = "#D4853A";
 const BLUE   = "#4A88B8";
 const RED    = "#B85A5A";
 
-// Venues loaded dynamically from Supabase — fallback to these defaults
 const DEFAULT_VENUES = [
   { id:"rp-prime",       name:"RP Prime Steak & Seafood",    short:"RP Prime",        location:"Mahwah, New Jersey",       initials:"RP", color:"#C8A96E" },
   { id:"capital-grille", name:"The Capital Grille",           short:"Capital Grille",  location:"Paramus, New Jersey",      initials:"CG", color:"#8B6914" },
@@ -105,11 +104,8 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
   const [tab, setTab] = useState("venues");
   const [flash, setFlash] = useState("");
   
-  // Venue form
   const [vForm, setVForm] = useState({ name:"", short:"", location:"", initials:"", color:"#C8A96E" });
-  // Company form
   const [cForm, setCForm] = useState({ name:"" });
-  // Employee form
   const [eForm, setEForm] = useState({ name:"", company_id:"", pin:"" });
 
   function showFlash(msg) {
@@ -161,7 +157,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
 
   return (
     <div style={{ fontFamily:"Georgia,serif", background:BG, minHeight:"100vh", color:TEXT, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto" }}>
-      {/* Header */}
       <div style={{ background:SURF, borderBottom:`1px solid ${BORDER}`, padding:"12px 16px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <svg width="20" height="20" viewBox="0 0 42 42" fill="none">
@@ -173,10 +168,8 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
         <button className="btn" onClick={onExit} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:1 }}>EXIT</button>
       </div>
 
-      {/* Flash */}
       {flash && <div style={{ background:GREEN, color:"#fff", padding:"10px 16px", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, textAlign:"center" }}>{flash}</div>}
 
-      {/* Tabs */}
       <div style={{ display:"flex", background:CARD, borderBottom:`1px solid ${BORDER}` }}>
         {[["venues","Restaurants"],["companies","Companies"],["employees","Employees"]].map(([t,l]) => (
           <button key={t} className="btn" onClick={()=>setTab(t)} style={{
@@ -189,7 +182,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
 
       <div style={{ flex:1, overflow:"auto", padding:16 }}>
 
-        {/* RESTAURANTS TAB */}
         {tab==="venues" && <>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD RESTAURANT</div>
           <div style={{ display:"grid", gap:10, marginBottom:8 }}>
@@ -228,7 +220,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
           </div>
         </>}
 
-        {/* COMPANIES TAB */}
         {tab==="companies" && <>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD VALET COMPANY</div>
           <div style={{ display:"grid", gap:10, marginBottom:8 }}>
@@ -250,7 +241,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
           </div>
         </>}
 
-        {/* EMPLOYEES TAB */}
         {tab==="employees" && <>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD VALET EMPLOYEE</div>
           <div style={{ display:"grid", gap:10, marginBottom:8 }}>
@@ -299,14 +289,11 @@ export default function App() {
   const [adminPinError, setAdminPinError] = useState(false);
   const [showAdminPin, setShowAdminPin] = useState(false);
 
-  // Request notification permission on load
   useEffect(() => { requestNotifPermission(); }, []);
 
-  // Shared lot — keyed by venueId → plate → car
   const [lots, setLots] = useState({});
   const [dbReady, setDbReady] = useState(false);
 
-  // Load all lots from Supabase on mount + subscribe to changes
   useEffect(() => {
     async function loadLots() {
       const { data, error } = await supabase.from("lots").select("*");
@@ -326,7 +313,6 @@ export default function App() {
     }
     loadLots();
 
-    // Realtime subscription
     const channel = supabase
       .channel("lots-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "lots" },
@@ -343,12 +329,10 @@ export default function App() {
             });
           } else {
             const row = payload.new;
-            // Notify guest if their car status changed
             if (custUser && row.plate === normPlate(custUser.plate)) {
               if (row.status === "ready") sendNotif("🚗 Your car is outside!", "Pull up to the entrance — your car is waiting.");
               if (row.status === "enroute") sendNotif("🔑 Your car is on the way!", "Your valet is bringing your car out now.");
             }
-            // Notify valet if a guest requested their car
             if (valetVenue && row.venue_id === valetVenue.id && row.status === "requested") {
               sendNotif("🔔 Guest heading out!", `${row.plate} — ${row.customer_name || "Guest"} is ready.`);
             }
@@ -372,14 +356,12 @@ export default function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // Valet login
   const [valetEmployee, setValetEmployee] = useState(null);
   const [valetLoginScreen, setValetLoginScreen] = useState(true);
   const [valetPinInput, setValetPinInput] = useState("");
   const [valetPinError, setValetPinError] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
-  // Valet
   const [valetVenue, setValetVenue] = useState(null);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const [vForm, setVForm] = useState({ plate:"", make:"", color:"", location:"", box:"" });
@@ -389,7 +371,6 @@ export default function App() {
   const [tipModal, setTipModal] = useState(null);
   const [tipAmt, setTipAmt] = useState(null);
 
-  // Customer — simple: name + plate, NO venue selection
   const [custUser, setCustUser] = useState(() => {
     try {
       const saved = localStorage.getItem("portier_guest");
@@ -405,7 +386,6 @@ export default function App() {
   const [valetCompanies, setValetCompanies] = useState([]);
   const [valetEmployees, setValetEmployees] = useState([]);
 
-  // Load venues, companies, employees from Supabase
   useEffect(() => {
     supabase.from("venues").select("*").eq("active", true).then(({ data }) => {
       if (data && data.length > 0) setVenues(data);
@@ -446,7 +426,6 @@ export default function App() {
     return true;
   });
 
-  // Find customer's car — search ALL venue lots for their plate
   const custCar = custUser ? (() => {
     const plate = normPlate(custUser.plate);
     for (const vid of Object.keys(lots)) {
@@ -461,7 +440,6 @@ export default function App() {
     if (custCar?.car.status === STATUS.DONE && custScreen === "home") setCustScreen("tip");
   }, [custCar?.car.status]);
 
-  // Auto-link customer name when plate matches
   useEffect(() => {
     if (!custUser) return;
     const plate = normPlate(custUser.plate);
@@ -489,14 +467,9 @@ export default function App() {
       valet_name: valetEmployee ? valetEmployee.name : null,
     };
     try {
-      // First try delete existing, then insert fresh
       await supabase.from("lots").delete().eq("venue_id", valetVenue.id).eq("plate", plate);
       const { data, error } = await supabase.from("lots").insert([record]).select();
-      if (error) {
-        console.error("Supabase insert error:", error);
-        setVError("DB error: " + error.message);
-        return;
-      }
+      if (error) { console.error("Supabase insert error:", error); setVError("DB error: " + error.message); return; }
       console.log("Parked successfully:", data);
     } catch(e) {
       console.error("Network error:", e);
@@ -514,7 +487,6 @@ export default function App() {
     const next = {requested:STATUS.ENROUTE,enroute:STATUS.READY}[s];
     if (!next) return;
     const updateData = { status: next };
-    // Save valet name when they claim the car
     if (next === STATUS.ENROUTE && valetEmployee) {
       updateData.valet_name = valetEmployee.name;
     }
@@ -538,7 +510,6 @@ export default function App() {
     flash(`🔔 ${plate} — Guest heading out!`, "alert");
   }
 
-  // Admin PIN screen
   if (showAdminPin) return (
     <div style={{ fontFamily:"Georgia,serif", background:BG, minHeight:"100vh", color:TEXT, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", alignItems:"center", justifyContent:"center", padding:32 }}>
       <svg width="48" height="48" viewBox="0 0 42 42" fill="none" style={{ marginBottom:16 }}>
@@ -573,7 +544,6 @@ export default function App() {
     </div>
   );
 
-  // Admin dashboard
   if (side === "admin") return (
     <AdminDashboard
       venues={venues} setVenues={setVenues}
@@ -655,9 +625,8 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ VALET ═══ */}
+      {/* VALET LOGIN */}
       {side==="valet" && valetLoginScreen && !valetEmployee && (
-        /* VALET PIN LOGIN SCREEN */
         <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:32 }}>
           <svg width="48" height="48" viewBox="0 0 42 42" fill="none" style={{ marginBottom:14 }}>
             <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
@@ -666,10 +635,9 @@ export default function App() {
           <div style={{ fontFamily:"Georgia,serif", fontSize:20, color:GOLD, marginBottom:4, letterSpacing:3 }}>VALET ACCESS</div>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:28, letterSpacing:1 }}>Select your name to continue</div>
 
-          {/* Employee selector */}
           {valetEmployees.length === 0 ? (
             <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, textAlign:"center", marginBottom:24 }}>
-        No valets added yet.<br/>Ask your admin to add employees.
+              No valets added yet.<br/>Ask your admin to add employees.
             </div>
           ) : (
             <div style={{ width:"100%", maxWidth:320, display:"grid", gap:8, marginBottom:24 }}>
@@ -688,7 +656,6 @@ export default function App() {
             </div>
           )}
 
-          {/* PIN entry — shows after selecting employee */}
           {selectedEmployee && (
             <>
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:16, letterSpacing:1 }}>
@@ -733,7 +700,6 @@ export default function App() {
       {side==="valet" && (valetEmployee || valetEmployees.length===0) && (
         <div className="fadeUp" style={{ flex:1, padding:16, overflow:"auto" }}>
 
-          {/* Venue selector */}
           <div style={{ marginBottom:14 }}>
             {!valetVenue ? (
               <div style={{ background:SURF, border:`2px dashed ${BORDER}`, borderRadius:12, padding:20, textAlign:"center" }}>
@@ -772,7 +738,6 @@ export default function App() {
           </div>
 
           {valetVenue && <>
-            {/* Park form */}
             <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:16, marginBottom:14 }}>
               <div style={{ fontFamily:"Georgia,serif", fontSize:17, color:GOLD, marginBottom:14 }}>Park a Car</div>
 
@@ -786,7 +751,18 @@ export default function App() {
               <div style={{ marginBottom:10 }}>
                 <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1.5, marginBottom:5 }}>LICENSE PLATE</div>
                 <input placeholder="e.g. ABC1234" value={vForm.plate}
-                  onChange={async e=>{   const val = e.target.value.toUpperCase();   setVForm(p=>({...p, plate:val}));   setVError("");   const norm = normPlate(val);   if (norm.length >= 4) {     const { data } = await supabase.from("lots").select("make,color").eq("plate", norm).order("id", {ascending:false}).limit(1);     if (data && data[0]) {       setVForm(p=>({...p, plate:val, make:data[0].make||"", color:data[0].color||""}));     }   } }}
+                  onChange={async e=>{
+                    const val = e.target.value.toUpperCase();
+                    setVForm(p=>({...p, plate:val}));
+                    setVError("");
+                    const norm = normPlate(val);
+                    if (norm.length >= 4) {
+                      const { data } = await supabase.from("lots").select("make,color").eq("plate", norm).order("id", {ascending:false}).limit(1);
+                      if (data && data[0]) {
+                        setVForm(p=>({...p, plate:val, make:data[0].make||"", color:data[0].color||""}));
+                      }
+                    }
+                  }}
                   style={{ background:BG, border:`1px solid ${vError?RED:BORDER}`, borderRadius:9, padding:"11px 14px", color:TEXT, fontSize:18, fontFamily:"'IBM Plex Mono',monospace", letterSpacing:3, width:"100%", textTransform:"uppercase" }}/>
               </div>
 
@@ -835,7 +811,6 @@ export default function App() {
               <button className="btn" onClick={valetPark} style={{ width:"100%", padding:13, borderRadius:10, fontSize:14, fontWeight:700, fontFamily:"'IBM Plex Mono',monospace", background:vForm.plate&&vForm.make&&vForm.color&&vForm.box?GOLD:FAINT, color:vForm.plate&&vForm.make&&vForm.color&&vForm.box?BG:DIM }}>Park & Register</button>
             </div>
 
-            {/* Active lot */}
             {activeLot.length>0 && <>
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:8 }}>LOT · {activeLot.length} ACTIVE</div>
               <div style={{ display:"grid", gap:8, marginBottom:14 }}>
@@ -896,7 +871,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ═══ CUSTOMER ═══ */}
+      {/* CUSTOMER */}
       {side==="customer" && !custUser && <CustomerRegister onRegister={setCustUser} />}
       {side==="customer" && custUser && (
         <CustomerHome
@@ -1029,9 +1004,7 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
 
   return (
     <div className="fadeUp" style={{ flex:1, overflow:"auto", display:"flex", flexDirection:"column" }}>
-
       {car && car.status!==STATUS.DONE && car.status!==STATUS.READY ? (
-        /* CAR IS PARKED — show venue + car card */
         <div style={{ padding:16 }}>
           {venue && (
             <div style={{ textAlign:"center", padding:"28px 0 20px" }}>
@@ -1065,9 +1038,9 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
                 <div>
                   <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:sm.color }}>{sm.label}</div>
                   <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>
-                    {car.status===STATUS.PARKED&&"Your car is safely parked"}
-                    {car.status===STATUS.REQUESTED&&"Valet notified — heading to your car"}
-                    {car.status===STATUS.ENROUTE&&(car.valetName ? `${car.valetName.split(" ")[0]} is bringing your car out` : "Your car is on its way out")}
+                    {car.status===STATUS.PARKED && "Your car is safely parked"}
+                    {car.status===STATUS.REQUESTED && "Valet notified — heading to your car"}
+                    {car.status===STATUS.ENROUTE && (car.valetName ? `${car.valetName.split(" ")[0]} is bringing your car out` : "Your car is on its way out")}
                   </div>
                 </div>
               </div>
@@ -1082,36 +1055,23 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
           </div>
         </div>
       ) : !car ? (
-        /* NO CAR — centered welcome screen */
         <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"32px 24px", textAlign:"center" }}>
-
-          {/* P Crest */}
           <svg width="72" height="72" viewBox="0 0 42 42" fill="none" style={{ marginBottom:12 }}>
             <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
             <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
           </svg>
-
-          {/* Divider */}
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:6 }}>
             <div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/><div style={{ width:4, height:4, background:GOLD, borderRadius:"50%", opacity:.6 }}/><div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/>
           </div>
-
-          {/* PORTIER */}
           <div style={{ fontFamily:"Georgia,serif", fontSize:28, fontWeight:"bold", letterSpacing:8, color:GOLD, marginBottom:6 }}>PORTIER</div>
-
-          {/* Divider */}
           <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
             <div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/><div style={{ width:4, height:4, background:GOLD, transform:"rotate(45deg)", opacity:.6 }}/><div style={{ height:1, width:28, background:GOLD, opacity:.4 }}/>
           </div>
-
-          {/* Good evening */}
           <div style={{ fontFamily:"Georgia,serif", fontSize:20, color:TEXT, marginBottom:4 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:28 }}>
             Plate: <span style={{ color:GOLD, letterSpacing:2 }}>{user.plate.toUpperCase()}</span>
             <span style={{ marginLeft:8, background:`${BORDER}`, border:`1px solid ${BORDER}`, borderRadius:4, padding:"1px 6px" }}>NOT CHECKED IN YET</span>
           </div>
-
-          {/* No car card */}
           <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"20px 18px", marginBottom:28, width:"100%", maxWidth:340 }}>
             <div style={{ width:8, height:8, borderRadius:"50%", background:DIM, margin:"0 auto 10px", opacity:.4 }}/>
             <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:GOLD, marginBottom:6 }}>No car checked in yet</div>
@@ -1120,16 +1080,10 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               Your plate <span style={{ color:GOLD, letterSpacing:1 }}>{user.plate.toUpperCase()}</span> links automatically.
             </div>
           </div>
-
-          {/* Date */}
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:3, marginBottom:10, textTransform:"uppercase" }}>{today()}</div>
-
-          {/* Message */}
           <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:DIM, fontStyle:"italic", lineHeight:1.8, marginBottom:28 }}>
             When you're ready to leave<br/>tap the button and your car will be outside.
           </div>
-
-          {/* Quote */}
           <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:14, padding:"18px 22px", width:"100%", maxWidth:340 }}>
             <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:DIM, fontStyle:"italic", lineHeight:1.8 }}>
               "The finest things in life arrive<br/>exactly when they should."
@@ -1140,7 +1094,6 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               <div style={{ height:1, width:24, background:GOLD, opacity:.3 }}/>
             </div>
           </div>
-
         </div>
       ) : null}
     </div>
