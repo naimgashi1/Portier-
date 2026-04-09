@@ -372,6 +372,13 @@ export default function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  // Valet login
+  const [valetEmployee, setValetEmployee] = useState(null);
+  const [valetLoginScreen, setValetLoginScreen] = useState(true);
+  const [valetPinInput, setValetPinInput] = useState("");
+  const [valetPinError, setValetPinError] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+
   // Valet
   const [valetVenue, setValetVenue] = useState(null);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
@@ -596,7 +603,7 @@ export default function App() {
         <PortierHeader onLongPress={()=>{ setShowAdminPin(true); setAdminPinInput(""); setAdminPinError(false); }} />
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5 }}>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, letterSpacing:2, padding:"5px 8px" }}>
-            {side === "customer" ? "GUEST" : "VALET"}
+            {side === "customer" ? "GUEST" : valetEmployee ? valetEmployee.name.split(" ")[0].toUpperCase() : "VALET"}
           </div>
           {pendingCount>0 && side==="valet" && (
             <div className="blink" style={{ fontSize:9, fontFamily:"'IBM Plex Mono',monospace", color:AMBER, letterSpacing:1 }}>● {pendingCount} PENDING</div>
@@ -629,7 +636,82 @@ export default function App() {
       )}
 
       {/* ═══ VALET ═══ */}
-      {side==="valet" && (
+      {side==="valet" && valetLoginScreen && !valetEmployee && (
+        /* VALET PIN LOGIN SCREEN */
+        <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:32 }}>
+          <svg width="48" height="48" viewBox="0 0 42 42" fill="none" style={{ marginBottom:14 }}>
+            <circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/>
+            <text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text>
+          </svg>
+          <div style={{ fontFamily:"Georgia,serif", fontSize:20, color:GOLD, marginBottom:4, letterSpacing:3 }}>VALET ACCESS</div>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:28, letterSpacing:1 }}>Select your name to continue</div>
+
+          {/* Employee selector */}
+          {valetEmployees.length === 0 ? (
+            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, textAlign:"center", marginBottom:24 }}>
+              No valets added yet.{"
+"}Ask your admin to add employees.
+            </div>
+          ) : (
+            <div style={{ width:"100%", maxWidth:320, display:"grid", gap:8, marginBottom:24 }}>
+              {valetEmployees.map(e => (
+                <button key={e.id} className="btn" onClick={() => { setSelectedEmployee(e); setValetPinInput(""); setValetPinError(false); }}
+                  style={{ background: selectedEmployee?.id===e.id ? GOLD2 : SURF, border:`1px solid ${selectedEmployee?.id===e.id ? GOLD : BORDER}`, borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:12, textAlign:"left" }}>
+                  <div style={{ width:36, height:36, borderRadius:"50%", background:GOLD2, border:`1px solid ${GOLD}`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Georgia,serif", fontSize:16, color:GOLD, fontWeight:"bold", flexShrink:0 }}>
+                    {e.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:TEXT }}>{e.name}</div>
+                    {e.valet_companies?.name && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:2 }}>{e.valet_companies.name}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* PIN entry — shows after selecting employee */}
+          {selectedEmployee && (
+            <>
+              <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:16, letterSpacing:1 }}>
+                Enter PIN for <span style={{ color:GOLD }}>{selectedEmployee.name}</span>
+              </div>
+              <div style={{ display:"flex", gap:12, marginBottom:16 }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{ width:16, height:16, borderRadius:"50%", background: i < valetPinInput.length ? GOLD : "transparent", border:`1.5px solid ${GOLD}`, opacity: i < valetPinInput.length ? 1 : 0.4 }}/>
+                ))}
+              </div>
+              {valetPinError && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:RED, marginBottom:12, letterSpacing:1 }}>INCORRECT PIN</div>}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, width:200, marginBottom:16 }}>
+                {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i) => (
+                  <button key={i} className="btn" onClick={() => {
+                    if (k==="⌫") { setValetPinInput(p=>p.slice(0,-1)); setValetPinError(false); }
+                    else if (k==="") return;
+                    else {
+                      const next = valetPinInput + k;
+                      setValetPinInput(next);
+                      if (next.length === 4) {
+                        if (next === selectedEmployee.pin) {
+                          setValetEmployee(selectedEmployee);
+                          setValetLoginScreen(false);
+                          setValetPinInput("");
+                          setValetPinError(false);
+                        } else {
+                          setValetPinError(true);
+                          setValetPinInput("");
+                        }
+                      }
+                    }
+                  }} style={{ height:52, borderRadius:10, fontSize:18, fontFamily:"Georgia,serif", background:k===""?"transparent":SURF, color:TEXT, border:k===""?"none":`1px solid ${BORDER}` }}>{k}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          <button className="btn" onClick={()=>setSide("customer")} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:8 }}>Cancel</button>
+        </div>
+      )}
+
+      {side==="valet" && (valetEmployee || valetEmployees.length===0) && (
         <div className="fadeUp" style={{ flex:1, padding:16, overflow:"auto" }}>
 
           {/* Venue selector */}
