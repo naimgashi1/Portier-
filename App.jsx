@@ -669,8 +669,7 @@ export default function App() {
           {/* Employee selector */}
           {valetEmployees.length === 0 ? (
             <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, textAlign:"center", marginBottom:24 }}>
-              No valets added yet.{"
-"}Ask your admin to add employees.
+        No valets added yet.<br/>Ask your admin to add employees.
             </div>
           ) : (
             <div style={{ width:"100%", maxWidth:320, display:"grid", gap:8, marginBottom:24 }}>
