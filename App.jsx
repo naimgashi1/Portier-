@@ -786,7 +786,7 @@ export default function App() {
               <div style={{ marginBottom:10 }}>
                 <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1.5, marginBottom:5 }}>LICENSE PLATE</div>
                 <input placeholder="e.g. ABC1234" value={vForm.plate}
-                  onChange={e=>{ setVForm(p=>({...p,plate:e.target.value.toUpperCase()})); setVError(""); }}
+                  onChange={async e=>{   const val = e.target.value.toUpperCase();   setVForm(p=>({...p, plate:val}));   setVError("");   const norm = normPlate(val);   if (norm.length >= 4) {     const { data } = await supabase.from("lots").select("make,color").eq("plate", norm).order("id", {ascending:false}).limit(1);     if (data && data[0]) {       setVForm(p=>({...p, plate:val, make:data[0].make||"", color:data[0].color||""}));     }   } }}
                   style={{ background:BG, border:`1px solid ${vError?RED:BORDER}`, borderRadius:9, padding:"11px 14px", color:TEXT, fontSize:18, fontFamily:"'IBM Plex Mono',monospace", letterSpacing:3, width:"100%", textTransform:"uppercase" }}/>
               </div>
 
