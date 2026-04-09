@@ -318,7 +318,7 @@ export default function App() {
           plate: row.plate, make: row.make, color: row.color,
           location: row.location, box: row.box, status: row.status,
           time: row.time, date: row.date, customerName: row.customer_name,
-          tip: row.tip, rating: row.rating
+          tip: row.tip, rating: row.rating, valetName: row.valet_name
         };
       });
       setLots(built);
@@ -360,7 +360,7 @@ export default function App() {
                   plate: row.plate, make: row.make, color: row.color,
                   location: row.location, box: row.box, status: row.status,
                   time: row.time, date: row.date, customerName: row.customer_name,
-                  tip: row.tip, rating: row.rating
+                  tip: row.tip, rating: row.rating, valetName: row.valet_name
                 }
               }
             }));
@@ -486,6 +486,7 @@ export default function App() {
       status: STATUS.PARKED, time: now(), date: today(),
       tip: null, rating: null,
       customer_name: matched ? `${custUser.first} ${custUser.last}` : null,
+      valet_name: valetEmployee ? valetEmployee.name : null,
     };
     try {
       // First try delete existing, then insert fresh
@@ -512,7 +513,12 @@ export default function App() {
     const s = valetLot[plate]?.status;
     const next = {requested:STATUS.ENROUTE,enroute:STATUS.READY}[s];
     if (!next) return;
-    await supabase.from("lots").update({ status: next }).eq("venue_id", valetVenue.id).eq("plate", plate);
+    const updateData = { status: next };
+    // Save valet name when they claim the car
+    if (next === STATUS.ENROUTE && valetEmployee) {
+      updateData.valet_name = valetEmployee.name;
+    }
+    await supabase.from("lots").update(updateData).eq("venue_id", valetVenue.id).eq("plate", plate);
   }
 
   async function confirmRetrieve(plate, tip) {
@@ -1048,7 +1054,7 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
                   <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>
                     {car.status===STATUS.PARKED&&"Your car is safely parked"}
                     {car.status===STATUS.REQUESTED&&"Valet notified — heading to your car"}
-                    {car.status===STATUS.ENROUTE&&"Your car is on its way out"}
+                    {car.status===STATUS.ENROUTE&&(car.valetName ? `${car.valetName.split(" ")[0]} is on the way with your car` : "Your car is on its way out")}
                   </div>
                 </div>
               </div>
