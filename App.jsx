@@ -893,11 +893,6 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
             </div>
           )}
 
-          {/* LIVE PARKING CLOCK — garages and hotels only */}
-          {car.hourlyRate > 0 && car.status === STATUS.PARKED && (
-            <ParkingClock parkedAt={car.parkedAt} hourlyRate={car.hourlyRate} />
-          )}
-
           <div style={{ marginBottom:16 }}>
             <div style={{ fontFamily:"Georgia,serif", fontSize:21 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
@@ -933,6 +928,11 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               )}
             </div>
           </div>
+
+          {/* LIVE PARKING CLOCK — bottom, garages and hotels only */}
+          {car.hourlyRate > 0 && car.status === STATUS.PARKED && (
+            <ParkingClock parkedAt={car.parkedAt} hourlyRate={car.hourlyRate} />
+          )}
         </div>
       ) : !car ? (
         /* CLEAN HOME SCREEN */
