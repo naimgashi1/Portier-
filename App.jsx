@@ -24,6 +24,81 @@ async function requestNotifPermission() {
   }
 }
 
+const RAPIDAPI_KEY = "8924482762mshd2d068b1bc7e68fp160893jsn28d29540805b";
+
+async function checkFlight(flightNumber, returnDate) {
+  try {
+    const url = `https://aerodatabox.p.rapidapi.com/flights/number/${flightNumber}/${returnDate}`;
+    const res = await fetch(url, {
+      headers: {
+        "x-rapidapi-host": "aerodatabox.p.rapidapi.com",
+        "x-rapidapi-key": RAPIDAPI_KEY,
+      }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || !data[0]) return null;
+    const flight = data[0];
+    const status = (flight.status || "").toLowerCase();
+    const scheduledArrival = flight.arrival?.scheduledTime?.local || flight.arrival?.scheduledTime?.utc || null;
+    const actualArrival = flight.arrival?.actualTime?.local || flight.arrival?.actualTime?.utc || null;
+    const landed = status === "arrived" || status === "landed" || !!actualArrival;
+    return { status, landed, scheduledArrival, actualArrival };
+  } catch { return null; }
+}
+
+// Active flight timers - keyed by plate
+const flightTimers = {};
+
+async function scheduleFlightTracking(plate, venueId, flightNumber, returnDate, customerName) {
+  // Clear any existing timer for this plate
+  if (flightTimers[plate]) {
+    clearTimeout(flightTimers[plate].wakeup);
+    clearInterval(flightTimers[plate].poll);
+  }
+
+  // Step 1 — get scheduled arrival time
+  const result = await checkFlight(flightNumber, returnDate);
+  if (!result) return;
+
+  if (result.landed) {
+    // Already landed
+    await supabase.from("lots").update({ flight_status: "landed" }).eq("plate", plate).eq("venue_id", venueId);
+    sendNotif("✈️ Flight Landed!", `${plate} — ${customerName || "Guest"}'s flight ${flightNumber} has landed. Get the car ready!`);
+    return;
+  }
+
+  if (result.scheduledArrival) {
+    // Save arrival time to Supabase
+    await supabase.from("lots").update({ arrival_time: result.scheduledArrival, flight_status: "tracked" }).eq("plate", plate).eq("venue_id", venueId);
+
+    const arrivalMs = new Date(result.scheduledArrival).getTime();
+    const wakeupMs = arrivalMs - (60 * 60 * 1000); // 1 hour before
+    const now = Date.now();
+    const sleepMs = Math.max(0, wakeupMs - now);
+
+    // Sleep until 1 hour before arrival, then poll every 5 min
+    flightTimers[plate] = {};
+    flightTimers[plate].wakeup = setTimeout(async () => {
+      flightTimers[plate].poll = setInterval(async () => {
+        const check = await checkFlight(flightNumber, returnDate);
+        if (!check) return;
+        if (check.landed) {
+          clearInterval(flightTimers[plate].poll);
+          await supabase.from("lots").update({ flight_status: "landed" }).eq("plate", plate).eq("venue_id", venueId);
+          sendNotif("✈️ Flight Landed!", `${plate} — ${customerName || "Guest"}'s flight ${flightNumber} has landed. Get the car ready!`);
+        }
+      }, 5 * 60 * 1000); // every 5 minutes
+    }, sleepMs);
+  } else {
+    // No scheduled arrival yet — check again in 1 hour
+    flightTimers[plate] = {};
+    flightTimers[plate].wakeup = setTimeout(() => {
+      scheduleFlightTracking(plate, venueId, flightNumber, returnDate, customerName);
+    }, 60 * 60 * 1000);
+  }
+}
+
 const GOLD   = "#C8A96E";
 const GOLD2  = "rgba(200,169,110,0.12)";
 const TEXT   = "#EDE8DC";
@@ -79,6 +154,7 @@ function rowToCar(row) {
     time: row.time, date: row.date, customerName: row.customer_name,
     tip: row.tip, rating: row.rating, valetName: row.valet_name,
     parkedAt: row.parked_at, hourlyRate: row.hourly_rate || 0,
+    returnFlight: row.return_flight || null, returnDate: row.return_date || null, flightStatus: row.flight_status || null, arrivalTime: row.arrival_time || null, dailyRate: row.daily_rate || 0, dailyRate: row.daily_rate || 0,
   };
 }
 
@@ -102,7 +178,7 @@ function PortierHeader({ onLongPress }) {
 function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, valetEmployees, setValetEmployees, onExit }) {
   const [tab, setTab] = useState("venues");
   const [flashMsg, setFlashMsg] = useState("");
-  const [vForm, setVForm] = useState({ name:"", short:"", location:"", initials:"", color:"#C8A96E", hourly_rate:"" });
+  const [vForm, setVForm] = useState({ name:"", short:"", location:"", initials:"", color:"#C8A96E", hourly_rate:"", is_airport:false, airport_code:"", daily_rate:"" });
   const [cForm, setCForm] = useState({ name:"" });
   const [eForm, setEForm] = useState({ name:"", company_id:"", pin:"" });
 
@@ -112,11 +188,11 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
     if (!vForm.name || !vForm.initials) return;
     const id = vForm.name.toLowerCase().replace(/[^a-z0-9]+/g,"-");
     const hourly_rate = parseFloat(vForm.hourly_rate) || 0;
-    const record = { id, name:vForm.name, short:vForm.short||vForm.name, location:vForm.location, initials:vForm.initials.toUpperCase().slice(0,2), color:vForm.color, active:true, hourly_rate };
+    const record = { id, name:vForm.name, short:vForm.short||vForm.name, location:vForm.location, initials:vForm.initials.toUpperCase().slice(0,2), color:vForm.color, active:true, hourly_rate, is_airport:vForm.is_airport, airport_code:vForm.airport_code.toUpperCase(), daily_rate: parseFloat(vForm.daily_rate)||0 };
     const { error } = await supabase.from("venues").insert([record]);
     if (error) { showFlash("Error: " + error.message); return; }
     setVenues(p => [...p, record]);
-    setVForm({ name:"", short:"", location:"", initials:"", color:"#C8A96E", hourly_rate:"" });
+    setVForm({ name:"", short:"", location:"", initials:"", color:"#C8A96E", hourly_rate:"", is_airport:false, airport_code:"", daily_rate:"" });
     showFlash("✓ Venue added");
   }
 
@@ -189,6 +265,21 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
             </div>
             <div><label style={labelStyle}>LOCATION</label><input placeholder="e.g. New York, New York" value={vForm.location} onChange={e=>setVForm(p=>({...p,location:e.target.value}))} style={inputStyle}/></div>
             <div><label style={labelStyle}>HOURLY RATE ($/hr) — enter 0 for restaurants</label><input placeholder="e.g. 12 for $12/hr, 0 for restaurant valet" value={vForm.hourly_rate} onChange={e=>setVForm(p=>({...p,hourly_rate:e.target.value}))} type="number" min="0" step="0.50" style={inputStyle}/></div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", background:SURF, border:`1px solid ${BORDER}`, borderRadius:10, padding:"12px 14px" }}>
+              <div>
+                <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>Airport Venue</div>
+                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:2 }}>Enable flight tracking for guests</div>
+              </div>
+              <div onClick={()=>setVForm(p=>({...p,is_airport:!p.is_airport}))} style={{ width:44, height:24, borderRadius:12, background:vForm.is_airport?GOLD:BORDER, cursor:"pointer", position:"relative", transition:"background .2s" }}>
+                <div style={{ position:"absolute", top:3, left:vForm.is_airport?20:3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left .2s" }}/>
+              </div>
+            </div>
+            {vForm.is_airport && (
+              <div style={{ display:"grid", gap:10 }}>
+                <div><label style={labelStyle}>AIRPORT CODE (IATA)</label><input placeholder="e.g. EWR, JFK, LGA, MIA" value={vForm.airport_code} onChange={e=>setVForm(p=>({...p,airport_code:e.target.value.toUpperCase()}))} maxLength={3} style={inputStyle}/></div>
+                <div><label style={labelStyle}>DAILY PARKING RATE ($/day)</label><input placeholder="e.g. 13 for $13/day" value={vForm.daily_rate||""} onChange={e=>setVForm(p=>({...p,daily_rate:e.target.value}))} type="number" min="0" step="0.50" style={inputStyle}/></div>
+              </div>
+            )}
             <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, alignItems:"end" }}>
               <div><label style={labelStyle}>BRAND COLOR</label><input type="color" value={vForm.color} onChange={e=>setVForm(p=>({...p,color:e.target.value}))} style={{ ...inputStyle, padding:6, height:44, cursor:"pointer" }}/></div>
               <div style={{ width:44, height:44, borderRadius:10, background:vForm.color, border:`1px solid ${BORDER}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -352,6 +443,21 @@ export default function App() {
   const [notif, setNotif] = useState(null);
   const notifRef = useRef();
 
+  // Flight tracker — on app load, resume tracking any active flights
+  useEffect(() => {
+    async function resumeFlightTracking() {
+      const today = new Date().toISOString().split("T")[0];
+      // Find all flights that are pending or tracked but not yet landed, due today or future
+      const { data } = await supabase.from("lots").select("*").in("flight_status", ["pending", "tracked"]).gte("return_date", today);
+      if (!data || data.length === 0) return;
+      for (const row of data) {
+        if (!row.return_flight || !row.return_date) continue;
+        scheduleFlightTracking(row.plate, row.venue_id, row.return_flight, row.return_date, row.customer_name);
+      }
+    }
+    resumeFlightTracking();
+  }, []);
+
   useEffect(() => { custUserRef.current = custUser; }, [custUser]);
   useEffect(() => { valetVenueRef.current = valetVenue; }, [valetVenue]);
 
@@ -414,6 +520,8 @@ export default function App() {
       valet_name: valetEmployee ? valetEmployee.name : null,
       parked_at: new Date().toISOString(),
       hourly_rate: valetVenue.hourly_rate || 0,
+      daily_rate: valetVenue.daily_rate || 0,
+      daily_rate: valetVenue.daily_rate || 0,
     };
     try {
       await supabase.from("lots").delete().eq("venue_id", valetVenue.id).eq("plate", plate);
@@ -699,6 +807,7 @@ export default function App() {
                             {car.customerName?<span style={{ color:TEXT, marginLeft:6 }}>· {car.customerName}</span>:<span style={{ color:FAINT, marginLeft:6 }}>· Walk-in</span>}
                           </div>
                           {car.location&&<div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:GOLD, marginTop:2 }}>📍 {car.location}</div>}
+                          {car.returnFlight&&<div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:BLUE, marginTop:2 }}>✈️ {car.returnFlight} · {car.returnDate}{car.flightStatus==="landed"?" · LANDED 🟢":""}</div>}
                         </div>
                         <div style={{ textAlign:"right" }}>
                           <div style={{ fontSize:11, color:sm.color, fontFamily:"'IBM Plex Mono',monospace" }}>{sm.label}</div>
@@ -811,6 +920,89 @@ function ParkingClock({ parkedAt, hourlyRate }) {
       <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginBottom:8 }}>RUNNING TOTAL</div>
       <div style={{ fontFamily:"Georgia,serif", fontSize:40, color:GREEN }}>${cost}</div>
       <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:6 }}>${hourlyRate}/hr</div>
+    </div>
+  );
+}
+
+function DailyBill({ car }) {
+  if (!car.parkedAt || !car.dailyRate) return null;
+  const msParked = Date.now() - new Date(car.parkedAt).getTime();
+  const days = Math.max(1, Math.ceil(msParked / (1000 * 60 * 60 * 24)));
+  const total = (days * car.dailyRate).toFixed(2);
+
+  return (
+    <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:"18px 20px", marginBottom:14, textAlign:"center" }}>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:10 }}>PARKING TOTAL</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:22, color:GOLD, letterSpacing:2, marginBottom:4 }}>{days} {days===1?"day":"days"}</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginBottom:8 }}>AMOUNT DUE</div>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:40, color:GREEN }}>${total}</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:6 }}>${car.dailyRate}/day</div>
+    </div>
+  );
+}
+
+function FlightCard({ car, venue, onSave }) {
+  const [flight, setFlight] = useState(car.returnFlight || "");
+  const [date, setDate] = useState(car.returnDate || "");
+  const [saved, setSaved] = useState(!!car.returnFlight);
+  const [checking, setChecking] = useState(false);
+
+  async function saveFlight() {
+    if (!flight || !date) return;
+    const flightUp = flight.toUpperCase();
+    await supabase.from("lots").update({ return_flight: flightUp, return_date: date, flight_status: "pending" }).eq("plate", car.plate);
+    setSaved(true);
+    // Start smart flight tracking immediately
+    scheduleFlightTracking(car.plate, venue?.id, flightUp, date, car.customerName);
+    onSave && onSave();
+  }
+
+  const inputStyle = { background:CARD, border:`1px solid ${BORDER}`, borderRadius:9, padding:"11px 14px", color:TEXT, fontSize:14, fontFamily:"'IBM Plex Mono',monospace", width:"100%", outline:"none", letterSpacing:1 };
+
+  return (
+    <div style={{ background:SURF, border:`1px solid ${BLUE}30`, borderRadius:14, padding:"18px 18px", marginBottom:16 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        <span style={{ fontSize:20 }}>✈️</span>
+        <div>
+          <div style={{ fontFamily:"Georgia,serif", fontSize:15, color:TEXT }}>Return Flight</div>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:1 }}>Add your return flight — car will be ready when you land</div>
+        </div>
+      </div>
+      {saved ? (
+        <div style={{ background:`${GREEN}15`, border:`1px solid ${GREEN}40`, borderRadius:10, padding:"12px 14px" }}>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:GREEN, marginBottom:4 }}>✓ Flight tracked</div>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:13, color:GOLD, letterSpacing:2 }}>{car.returnFlight || flight}</div>
+          <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:2 }}>{car.returnDate || date}</div>
+          {car.arrivalTime && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:GREEN, marginTop:4 }}>Scheduled arrival: {new Date(car.arrivalTime).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>}
+          {car.flightStatus === "tracked" && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:BLUE, marginTop:2 }}>✓ Tracking — valet notified when you land</div>}
+          {car.flightStatus === "landed" && car.dailyRate > 0 && (() => {
+            const days = Math.max(1, Math.ceil((Date.now() - new Date(car.parkedAt).getTime()) / 86400000));
+            const total = (days * car.dailyRate).toFixed(2);
+            return (
+              <div style={{ marginTop:12, background:`${GREEN}15`, border:`1px solid ${GREEN}40`, borderRadius:10, padding:"14px" }}>
+                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:GREEN, marginBottom:8 }}>✈️ LANDED — PARKING BILL</div>
+                <div style={{ fontFamily:"Georgia,serif", fontSize:32, color:GREEN, marginBottom:4 }}>${total}</div>
+                <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginBottom:12 }}>{days} day{days>1?"s":""} × ${car.dailyRate}/day</div>
+                <button className="btn" style={{ width:"100%", padding:13, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600 }}>Pay ${total} · Apple Pay</button>
+                <button className="btn" style={{ width:"100%", padding:10, borderRadius:10, fontSize:12, color:DIM, fontFamily:"'IBM Plex Mono',monospace", marginTop:6 }}>Add tip for valet</button>
+              </div>
+            );
+          })()}
+          <button className="btn" onClick={()=>setSaved(false)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:8, textDecoration:"underline" }}>Change</button>
+        </div>
+      ) : (
+        <div style={{ display:"grid", gap:10 }}>
+          <div>
+            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1.5, marginBottom:5 }}>RETURN FLIGHT NUMBER</div>
+            <input placeholder="e.g. BA456, AA1234" value={flight} onChange={e=>setFlight(e.target.value.toUpperCase())} style={inputStyle}/>
+          </div>
+          <div>
+            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1.5, marginBottom:5 }}>RETURN DATE</div>
+            <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inputStyle}/>
+          </div>
+          <button className="btn" onClick={saveFlight} style={{ width:"100%", padding:12, borderRadius:10, fontSize:14, fontFamily:"Georgia,serif", background:flight&&date?GOLD:FAINT, color:flight&&date?BG:DIM, fontWeight:600 }}>Save Flight</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -933,6 +1125,16 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
           {/* LIVE PARKING CLOCK — bottom, garages and hotels only */}
           {car.hourlyRate > 0 && car.status === STATUS.PARKED && (
             <ParkingClock parkedAt={car.parkedAt} hourlyRate={car.hourlyRate} />
+          )}
+
+          {/* FLIGHT CARD — airport venues only */}
+          {venue?.is_airport && car.status === STATUS.PARKED && (
+            <FlightCard car={car} venue={venue} />
+          )}
+
+          {/* DAILY BILL — shows when flight landed or car is being retrieved */}
+          {venue?.is_airport && car.dailyRate > 0 && (car.flightStatus === "landed" || car.status === STATUS.REQUESTED || car.status === STATUS.ENROUTE) && (
+            <DailyBill car={car} />
           )}
         </div>
       ) : !car ? (
