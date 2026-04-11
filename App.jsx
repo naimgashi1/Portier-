@@ -802,7 +802,7 @@ function ParkingClock({ parkedAt, hourlyRate }) {
 
   if (!parkedAt || !hourlyRate) return null;
   const hours = Math.max(1, Math.ceil(elapsed / 3600000));
-  const cost = (hours * hourlyRate).toFixed(2);
+  const cost = (hours * const hours = Math.max(1, Math.ceil(elapsed / 3600000)); const cost = (hours * hourlyRate).toFixed(2);(2);
 
   return (
     <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:"18px 20px", marginBottom:14, textAlign:"center" }}>
