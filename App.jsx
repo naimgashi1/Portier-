@@ -202,6 +202,12 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
     setVenues(p => p.map(v => v.id===id ? {...v, hourly_rate} : v));
   }
 
+  async function updateAirport(id, field, value) {
+    const update = { [field]: value };
+    await supabase.from("venues").update(update).eq("id", id);
+    setVenues(p => p.map(v => v.id===id ? {...v, [field]:value} : v));
+  }
+
   async function toggleVenue(id, active) {
     await supabase.from("venues").update({ active: !active }).eq("id", id);
     setVenues(p => p.map(v => v.id===id ? {...v, active:!active} : v));
@@ -303,10 +309,26 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
                   </div>
                   <button className="btn" onClick={()=>toggleVenue(v.id, v.active)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color: v.active!==false ? GREEN : RED, border:`1px solid ${v.active!==false ? GREEN+"40" : RED+"40"}`, borderRadius:6, padding:"3px 8px" }}>{v.active!==false ? "ACTIVE" : "INACTIVE"}</button>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>RATE: $</div>
-                  <input type="number" min="0" step="0.50" defaultValue={v.hourly_rate || 0} onBlur={e=>updateHourlyRate(v.id, e.target.value)} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:80, outline:"none" }}/>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>HOURLY: $</div>
+                  <input type="number" min="0" step="0.50" defaultValue={v.hourly_rate || 0} onBlur={e=>updateHourlyRate(v.id, e.target.value)} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:70, outline:"none" }}/>
                   <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>/hr · 0 = restaurant</div>
+                </div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>AIRPORT</div>
+                    <div onClick={()=>updateAirport(v.id, "is_airport", !v.is_airport)} style={{ width:36, height:20, borderRadius:10, background:v.is_airport?GOLD:BORDER, cursor:"pointer", position:"relative", transition:"background .2s", flexShrink:0 }}>
+                      <div style={{ position:"absolute", top:2, left:v.is_airport?16:2, width:16, height:16, borderRadius:"50%", background:"#fff", transition:"left .2s" }}/>
+                    </div>
+                  </div>
+                  {v.is_airport && (
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <input placeholder="IATA e.g. EWR" maxLength={3} defaultValue={v.airport_code||""} onBlur={e=>updateAirport(v.id,"airport_code",e.target.value.toUpperCase())} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"4px 8px", color:GOLD, fontSize:12, fontFamily:"'IBM Plex Mono',monospace", width:70, outline:"none" }}/>
+                      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>$</div>
+                      <input type="number" min="0" placeholder="0" defaultValue={v.daily_rate||0} onBlur={e=>updateAirport(v.id,"daily_rate",parseFloat(e.target.value)||0)} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"4px 8px", color:GOLD, fontSize:12, fontFamily:"'IBM Plex Mono',monospace", width:60, outline:"none" }}/>
+                      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>/day</div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
