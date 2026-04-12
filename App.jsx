@@ -959,7 +959,7 @@ export default function App() {
                       <div style={{ display:"flex", gap:7 }}>
                         {car.status===STATUS.REQUESTED&&<button className="btn" onClick={()=>advance(car.plate)} style={{ flex:1, padding:9, borderRadius:8, fontSize:12, background:BLUE, color:"#fff", fontFamily:"'IBM Plex Mono',monospace" }}>On the Way</button>}
                         {car.status===STATUS.ENROUTE&&<button className="btn" onClick={()=>advance(car.plate)} style={{ flex:1, padding:9, borderRadius:8, fontSize:12, background:GREEN, color:"#fff", fontFamily:"'IBM Plex Mono',monospace" }}>Car Ready</button>}
-                        {car.status===STATUS.READY&&<button className="btn" onClick={()=>{setTipModal(car.plate);setTipAmt(null);}} style={{ flex:1, padding:9, borderRadius:8, fontSize:12, background:GOLD, color:BG, fontWeight:700, fontFamily:"'IBM Plex Mono',monospace" }}>Retrieved</button>}
+                        {car.status===STATUS.READY&&<button className="btn" onClick={()=>confirmRetrieve(car.plate,null)} style={{ flex:1, padding:9, borderRadius:8, fontSize:12, background:GOLD, color:BG, fontWeight:700, fontFamily:"'IBM Plex Mono',monospace" }}>Retrieved</button>}
                         {car.status===STATUS.PARKED&&<div style={{ fontSize:11, color:DIM, fontFamily:"'IBM Plex Mono',monospace", padding:"8px 4px" }}>Waiting for guest…</div>}
                       </div>
                     </div>
