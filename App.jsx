@@ -22,7 +22,6 @@ const GOLD="#C8A96E", GOLD2="rgba(200,169,110,0.12)", TEXT="#EDE8DC", DIM="#7A70
 const FAINT="#2A2520", BG="#0A0906", SURF="#111009", CARD="#181510", BORDER="#272318";
 const ADMIN_PIN="2604", GREEN="#4A9E6E", AMBER="#D4853A", BLUE="#4A88B8", RED="#B85A5A";
 
-// Venue types
 const VTYPE = { RESTAURANT:"restaurant", GARAGE:"garage", HOTEL:"hotel", AIRPORT:"airport" };
 const VTYPE_LABELS = { restaurant:"🍽️ Restaurant", garage:"🅿️ Garage", hotel:"🏨 Hotel", airport:"✈️ Airport" };
 const BTYPE = { HOURLY:"hourly", DAILY:"daily", MONTHLY:"monthly" };
@@ -62,7 +61,6 @@ function rowToCar(row) {
   };
 }
 
-// Flight tracking
 const flightTimers = {};
 async function checkFlight(flightNumber, returnDate) {
   try {
@@ -126,12 +124,117 @@ function PortierHeader({ onLongPress }) {
   );
 }
 
+// ── VALET PERFORMANCE DASHBOARD ───────────────────────────────────────────
+function ValetPerformance({ valetEmployees, venues }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState("today");
+
+  useEffect(() => {
+    loadSessions();
+  }, [range]);
+
+  async function loadSessions() {
+    setLoading(true);
+    let query = supabase.from("lots").select("*").eq("status","done");
+    const now = new Date();
+    if (range==="today") {
+      const start = new Date(now.getFullYear(),now.getMonth(),now.getDate()).toISOString();
+      query = query.gte("parked_at", start);
+    } else if (range==="week") {
+      const start = new Date(now.getTime()-7*24*3600*1000).toISOString();
+      query = query.gte("parked_at", start);
+    } else if (range==="month") {
+      const start = new Date(now.getFullYear(),now.getMonth(),1).toISOString();
+      query = query.gte("parked_at", start);
+    }
+    const { data } = await query;
+    setSessions(data||[]);
+    setLoading(false);
+  }
+
+  // Build per-valet stats
+  const valetStats = {};
+  sessions.forEach(s => {
+    const name = s.valet_name||"Unknown";
+    if (!valetStats[name]) valetStats[name] = { name, cars:0, tips:0, tipCount:0, ratings:[], venues:{} };
+    valetStats[name].cars++;
+    if (s.tip) { valetStats[name].tips+=s.tip; valetStats[name].tipCount++; }
+    if (s.rating) valetStats[name].ratings.push(s.rating);
+    if (s.venue_id) valetStats[name].venues[s.venue_id]=(valetStats[name].venues[s.venue_id]||0)+1;
+  });
+
+  const stats = Object.values(valetStats).sort((a,b)=>b.tips-a.tips);
+  const totalCars = sessions.length;
+  const totalTips = sessions.reduce((s,c)=>s+(c.tip||0),0);
+  const tippedSessions = sessions.filter(s=>s.tip);
+  const avgTip = tippedSessions.length ? (totalTips/tippedSessions.length).toFixed(2) : "—";
+
+  const iS = { fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2 };
+
+  return (
+    <div style={{ padding:16, flex:1, overflow:"auto" }}>
+      {/* Range selector */}
+      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
+        {[["today","Today"],["week","7 Days"],["month","Month"],["all","All Time"]].map(([k,l])=>(
+          <button key={k} className="btn" onClick={()=>setRange(k)} style={{ flex:1, padding:"8px 0", borderRadius:8, fontSize:11, fontFamily:"'IBM Plex Mono',monospace", background:range===k?GOLD:SURF, color:range===k?BG:DIM, border:`1px solid ${range===k?GOLD:BORDER}` }}>{l}</button>
+        ))}
+      </div>
+
+      {/* Summary */}
+      <div style={{ background:SURF, border:`1px solid ${BORDER}`, borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+        <div style={{ ...iS, marginBottom:10 }}>OVERVIEW</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+          {[["CARS",totalCars,TEXT],["TIPS",`$${totalTips}`,GREEN],["AVG TIP",`$${avgTip}`,GOLD]].map(([l,v,c])=>(
+            <div key={l} style={{ textAlign:"center" }}>
+              <div style={{ fontFamily:"Georgia,serif", fontSize:22, color:c }}>{v}</div>
+              <div style={{ ...iS, marginTop:4 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {loading && <div style={{ textAlign:"center", padding:24, color:DIM, fontFamily:"'IBM Plex Mono',monospace", fontSize:11 }}>Loading…</div>}
+
+      {/* Per-valet breakdown */}
+      {!loading && stats.length===0 && <div style={{ textAlign:"center", padding:24, color:FAINT, fontFamily:"'IBM Plex Mono',monospace", fontSize:11 }}>No sessions in this period</div>}
+      {!loading && stats.map(v=>{
+        const avgRating = v.ratings.length ? (v.ratings.reduce((a,b)=>a+b,0)/v.ratings.length).toFixed(1) : null;
+        const topVenueId = Object.entries(v.venues).sort((a,b)=>b[1]-a[1])[0]?.[0];
+        const topVenue = venues.find(vn=>vn.id===topVenueId);
+        return (
+          <div key={v.name} style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:"13px 15px", marginBottom:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <div style={{ width:36, height:36, borderRadius:"50%", background:GOLD2, border:`1px solid ${GOLD}`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"Georgia,serif", fontSize:16, color:GOLD, fontWeight:"bold", flexShrink:0 }}>{v.name.charAt(0)}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>{v.name}</div>
+                {topVenue && <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:1 }}>{topVenue.short||topVenue.name}</div>}
+              </div>
+              {avgRating && <div style={{ textAlign:"right" }}><div style={{ fontFamily:"Georgia,serif", fontSize:16, color:GOLD }}>⭐ {avgRating}</div><div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>{v.ratings.length} ratings</div></div>}
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+              {[["CARS",v.cars,TEXT],["TIPS",`$${v.tips}`,GREEN],["AVG",v.tipCount?`$${(v.tips/v.tipCount).toFixed(0)}`:"—",GOLD]].map(([l,val,c])=>(
+                <div key={l} style={{ background:SURF, borderRadius:8, padding:"8px 0", textAlign:"center" }}>
+                  <div style={{ fontFamily:"Georgia,serif", fontSize:16, color:c }}>{val}</div>
+                  <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:8, color:DIM, marginTop:2 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, valetEmployees, setValetEmployees, onExit }) {
   const [tab, setTab] = useState("venues");
   const [flashMsg, setFlashMsg] = useState("");
   const [vForm, setVForm] = useState({ name:"", short:"", location:"", initials:"", color:"#C8A96E", venue_type:"restaurant", billing_type:"hourly", hourly_rate:"", daily_rate:"", monthly_rate:"", airport_code:"" });
   const [cForm, setCForm] = useState({ name:"" });
-  const [eForm, setEForm] = useState({ name:"", company_id:"", pin:"" });   const [editingVenue, setEditingVenue] = useState(null);   const [editForm, setEditForm] = useState({});
+  const [eForm, setEForm] = useState({ name:"", company_id:"", pin:"" });
+  const [editingVenue, setEditingVenue] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   function showFlash(msg) { setFlashMsg(msg); setTimeout(()=>setFlashMsg(""),2500); }
 
@@ -164,6 +267,22 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
     setVenues(p=>p.map(v=>v.id===id?{...v,active:!active}:v));
   }
 
+  async function saveVenueEdit() {
+    if (!editingVenue) return;
+    const fields = {
+      name:editForm.name, short:editForm.short||editForm.name, location:editForm.location,
+      initials:(editForm.initials||"").toUpperCase().slice(0,2), color:editForm.color,
+      venue_type:editForm.venue_type, billing_type:editForm.billing_type,
+      hourly_rate:parseFloat(editForm.hourly_rate)||0,
+      daily_rate:parseFloat(editForm.daily_rate)||0,
+      monthly_rate:parseFloat(editForm.monthly_rate)||0,
+      airport_code:(editForm.airport_code||"").toUpperCase(),
+    };
+    await supabase.from("venues").update(fields).eq("id",editingVenue);
+    setVenues(p=>p.map(v=>v.id===editingVenue?{...v,...fields}:v));
+    setEditingVenue(null); showFlash("✓ Venue updated");
+  }
+
   async function addCompany() {
     if (!cForm.name) return;
     const { data, error } = await supabase.from("valet_companies").insert([{ name:cForm.name }]).select();
@@ -180,7 +299,7 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
 
   async function removeEmployee(id) {
     await supabase.from("valet_employees").update({ active:false }).eq("id",id);
-    setValetEmployees(p=>async function saveVenueEdit() {     if (!editingVenue) return;     const fields = {       name:editForm.name, short:editForm.short||editForm.name, location:editForm.location,       initials:(editForm.initials||"").toUpperCase().slice(0,2), color:editForm.color,       venue_type:editForm.venue_type, billing_type:editForm.billing_type,       hourly_rate:parseFloat(editForm.hourly_rate)||0,       daily_rate:parseFloat(editForm.daily_rate)||0,       monthly_rate:parseFloat(editForm.monthly_rate)||0,       airport_code:(editForm.airport_code||"").toUpperCase(),     };     await supabase.from("venues").update(fields).eq("id",editingVenue);     setVenues(p=>p.map(v=>v.id===editingVenue?{...v,...fields}:v));     setEditingVenue(null); showFlash("✓ Venue updated");   });
+    setValetEmployees(p=>p.filter(e=>e.id!==id));
   }
 
   const iS = { background:SURF, border:`1px solid ${BORDER}`, borderRadius:10, padding:"12px 14px", color:TEXT, fontSize:14, fontFamily:"Georgia,serif", width:"100%", outline:"none" };
@@ -203,13 +322,15 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
 
       {flashMsg && <div style={{ background:GREEN, color:"#fff", padding:"10px 16px", fontFamily:"'IBM Plex Mono',monospace", fontSize:11, textAlign:"center" }}>{flashMsg}</div>}
 
-      <div style={{ display:"flex", background:CARD, borderBottom:`1px solid ${BORDER}` }}>
-        {[["venues","Venues"],["companies","Companies"],["employees","Employees"]].map(([t,l])=>(
-          <button key={t} className="btn" onClick={()=>setTab(t)} style={{ flex:1, padding:"12px 0", fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1, color:tab===t?GOLD:DIM, borderBottom:tab===t?`2px solid ${GOLD}`:"2px solid transparent" }}>{l.toUpperCase()}</button>
+      <div style={{ display:"flex", background:CARD, borderBottom:`1px solid ${BORDER}`, overflowX:"auto" }}>
+        {[["venues","Venues"],["companies","Companies"],["employees","Employees"],["performance","Performance"]].map(([t,l])=>(
+          <button key={t} className="btn" onClick={()=>setTab(t)} style={{ flex:1, padding:"12px 0", fontFamily:"'IBM Plex Mono',monospace", fontSize:10, letterSpacing:1, color:tab===t?GOLD:DIM, borderBottom:tab===t?`2px solid ${GOLD}`:"2px solid transparent", whiteSpace:"nowrap", minWidth:80 }}>{l.toUpperCase()}</button>
         ))}
       </div>
 
-      <div style={{ flex:1, overflow:"auto", padding:16 }}>
+      {tab==="performance" && <ValetPerformance valetEmployees={valetEmployees} venues={venues}/>}
+
+      {tab!=="performance" && <div style={{ flex:1, overflow:"auto", padding:16 }}>
         {tab==="venues" && <>
           <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:16 }}>ADD VENUE</div>
           <div style={{ display:"grid", gap:10, marginBottom:8 }}>
@@ -219,8 +340,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
               <div><label style={lS}>INITIALS</label><input placeholder="NP" maxLength={2} value={vForm.initials} onChange={e=>setVForm(p=>({...p,initials:e.target.value.toUpperCase()}))} style={iS}/></div>
             </div>
             <div><label style={lS}>LOCATION</label><input placeholder="e.g. Newark, New Jersey" value={vForm.location} onChange={e=>setVForm(p=>({...p,location:e.target.value}))} style={iS}/></div>
-
-            {/* VENUE TYPE */}
             <div>
               <label style={lS}>VENUE TYPE</label>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
@@ -229,8 +348,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
                 ))}
               </div>
             </div>
-
-            {/* GARAGE BILLING TYPE */}
             {isGarage && (
               <div>
                 <label style={lS}>BILLING TYPE</label>
@@ -241,8 +358,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
                 </div>
               </div>
             )}
-
-            {/* RATE FIELDS */}
             {!isRestaurant && (
               <>
                 {(isGarage && vForm.billing_type===BTYPE.HOURLY) && <div><label style={lS}>HOURLY RATE ($/hr)</label><input placeholder="e.g. 12" value={vForm.hourly_rate} onChange={e=>setVForm(p=>({...p,hourly_rate:e.target.value}))} type="number" min="0" step="0.50" style={iS}/></div>}
@@ -255,7 +370,6 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
                 </>}
               </>
             )}
-
             <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:10, alignItems:"end" }}>
               <div><label style={lS}>BRAND COLOR</label><input type="color" value={vForm.color} onChange={e=>setVForm(p=>({...p,color:e.target.value}))} style={{ ...iS, padding:6, height:44, cursor:"pointer" }}/></div>
               <div style={{ width:44, height:44, borderRadius:10, background:vForm.color, border:`1px solid ${BORDER}`, display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -275,31 +389,62 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
                     <div style={{ fontFamily:"Georgia,serif", fontSize:14, color:TEXT }}>{v.name}</div>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:2 }}>{v.location} · {VTYPE_LABELS[v.venue_type]||"🍽️ Restaurant"}</div>
                   </div>
-                  <button className="btn" onClick={()=>toggleVenue(v.id,v.active)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:v.active!==false?GREEN:RED, border:`1px solid ${v.active!==false?GREEN+"40":RED+"40"}`, borderRadius:6, padding:"3px 8px" }}>{v.active!==false?"ACTIVE":"INACTIVE"}</button>
+                  <div style={{ display:"flex", gap:6 }}>
+                    <button className="btn" onClick={()=>toggleVenue(v.id,v.active)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:v.active!==false?GREEN:RED, border:`1px solid ${v.active!==false?GREEN+"40":RED+"40"}`, borderRadius:6, padding:"3px 8px" }}>{v.active!==false?"ACTIVE":"INACTIVE"}</button>
+                    <button className="btn" onClick={()=>{ if(editingVenue===v.id){setEditingVenue(null);}else{setEditingVenue(v.id);setEditForm({...v,hourly_rate:v.hourly_rate||"",daily_rate:v.daily_rate||"",monthly_rate:v.monthly_rate||"",airport_code:v.airport_code||""});}}} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:GOLD, border:`1px solid ${GOLD}40`, borderRadius:6, padding:"3px 8px" }}>{editingVenue===v.id?"CANCEL":"EDIT"}</button>
+                  </div>
                 </div>
-                {/* <div style={{ display:"flex", gap:6 }}>                     <button className="btn" onClick={()=>toggleVenue(v.id,v.active)} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:v.active!==false?GREEN:RED, border:`1px solid ${v.active!==false?GREEN+"40":RED+"40"}`, borderRadius:6, padding:"3px 8px" }}>{v.active!==false?"ACTIVE":"INACTIVE"}</button>                     <button className="btn" onClick={()=>{ if(editingVenue===v.id){setEditingVenue(null);}else{setEditingVenue(v.id);setEditForm({...v,hourly_rate:v.hourly_rate||"",daily_rate:v.daily_rate||"",monthly_rate:v.monthly_rate||"",airport_code:v.airport_code||""});}}} style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:GOLD, border:`1px solid ${GOLD}40`, borderRadius:6, padding:"3px 8px" }}>{editingVenue===v.id?"CANCEL":"EDIT"}</button>                   </div>                 </div>                 {editingVenue===v.id && (                   <div style={{ borderTop:`1px solid ${BORDER}`, paddingTop:12, marginTop:4, display:"grid", gap:8 }}>                     <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>                       <div><label style={lS}>NAME</label><input value={editForm.name||""} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} style={iS}/></div>                       <div><label style={lS}>SHORT NAME</label><input value={editForm.short||""} onChange={e=>setEditForm(p=>({...p,short:e.target.value}))} style={iS}/></div>                     </div>                     <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8 }}>                       <div><label style={lS}>INITIALS</label><input maxLength={2} value={editForm.initials||""} onChange={e=>setEditForm(p=>({...p,initials:e.target.value.toUpperCase()}))} style={iS}/></div>                       <div style={{ paddingTop:17 }}><input type="color" value={editForm.color||"#C8A96E"} onChange={e=>setEditForm(p=>({...p,color:e.target.value}))} style={{ width:44, height:44, border:"none", background:"none", cursor:"pointer", borderRadius:8, padding:2 }}/></div>                     </div>                     <div><label style={lS}>LOCATION</label><input value={editForm.location||""} onChange={e=>setEditForm(p=>({...p,location:e.target.value}))} style={iS}/></div>                     <div>                       <label style={lS}>VENUE TYPE</label>                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>                         {Object.entries(VTYPE_LABELS).map(([type,label])=>(                           <button key={type} className="btn" onClick={()=>setEditForm(p=>({...p,venue_type:type}))} style={{ padding:"8px 4px", borderRadius:8, fontSize:11, fontFamily:"Georgia,serif", background:editForm.venue_type===type?GOLD:SURF, color:editForm.venue_type===type?BG:TEXT, border:`1px solid ${editForm.venue_type===type?GOLD:BORDER}` }}>{label}</button>                         ))}                       </div>                     </div>                     {editForm.venue_type===VTYPE.GARAGE && <div><label style={lS}>BILLING TYPE</label><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>{[[BTYPE.HOURLY,"Hourly"],[BTYPE.DAILY,"Daily"],[BTYPE.MONTHLY,"Monthly"]].map(([bt,bl])=>(<button key={bt} className="btn" onClick={()=>setEditForm(p=>({...p,billing_type:bt}))} style={{ padding:"8px 0", borderRadius:8, fontSize:11, fontFamily:"Georgia,serif", background:editForm.billing_type===bt?GOLD:SURF, color:editForm.billing_type===bt?BG:TEXT, border:`1px solid ${editForm.billing_type===bt?GOLD:BORDER}` }}>{bl}</button>))}</div></div>}                     {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.HOURLY && <div><label style={lS}>HOURLY RATE ($)</label><input type="number" value={editForm.hourly_rate} onChange={e=>setEditForm(p=>({...p,hourly_rate:e.target.value}))} style={iS}/></div>}                     {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.DAILY && <div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div>}                     {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.MONTHLY && <div><label style={lS}>MONTHLY RATE ($)</label><input type="number" value={editForm.monthly_rate} onChange={e=>setEditForm(p=>({...p,monthly_rate:e.target.value}))} style={iS}/></div>}                     {editForm.venue_type===VTYPE.HOTEL && <div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div>}                     {editForm.venue_type===VTYPE.AIRPORT && <><div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div><div><label style={lS}>AIRPORT CODE</label><input maxLength={3} value={editForm.airport_code} onChange={e=>setEditForm(p=>({...p,airport_code:e.target.value.toUpperCase()}))} style={iS}/></div></>}                     <button className="btn" onClick={saveVenueEdit} style={{ width:"100%", padding:11, borderRadius:9, fontSize:13, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600 }}>Save Changes</button>                   </div>                 )}                 {/* Rate editing based on venue type */} */}
-                {v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.HOURLY && (
+                {editingVenue===v.id && (
+                  <div style={{ borderTop:`1px solid ${BORDER}`, paddingTop:12, marginTop:4, display:"grid", gap:8 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                      <div><label style={lS}>NAME</label><input value={editForm.name||""} onChange={e=>setEditForm(p=>({...p,name:e.target.value}))} style={iS}/></div>
+                      <div><label style={lS}>SHORT NAME</label><input value={editForm.short||""} onChange={e=>setEditForm(p=>({...p,short:e.target.value}))} style={iS}/></div>
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:8 }}>
+                      <div><label style={lS}>INITIALS</label><input maxLength={2} value={editForm.initials||""} onChange={e=>setEditForm(p=>({...p,initials:e.target.value.toUpperCase()}))} style={iS}/></div>
+                      <div style={{ paddingTop:17 }}><input type="color" value={editForm.color||"#C8A96E"} onChange={e=>setEditForm(p=>({...p,color:e.target.value}))} style={{ width:44, height:44, border:"none", background:"none", cursor:"pointer", borderRadius:8, padding:2 }}/></div>
+                    </div>
+                    <div><label style={lS}>LOCATION</label><input value={editForm.location||""} onChange={e=>setEditForm(p=>({...p,location:e.target.value}))} style={iS}/></div>
+                    <div>
+                      <label style={lS}>VENUE TYPE</label>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+                        {Object.entries(VTYPE_LABELS).map(([type,label])=>(
+                          <button key={type} className="btn" onClick={()=>setEditForm(p=>({...p,venue_type:type}))} style={{ padding:"8px 4px", borderRadius:8, fontSize:11, fontFamily:"Georgia,serif", background:editForm.venue_type===type?GOLD:SURF, color:editForm.venue_type===type?BG:TEXT, border:`1px solid ${editForm.venue_type===type?GOLD:BORDER}` }}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+                    {editForm.venue_type===VTYPE.GARAGE && <div><label style={lS}>BILLING TYPE</label><div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>{[[BTYPE.HOURLY,"Hourly"],[BTYPE.DAILY,"Daily"],[BTYPE.MONTHLY,"Monthly"]].map(([bt,bl])=>(<button key={bt} className="btn" onClick={()=>setEditForm(p=>({...p,billing_type:bt}))} style={{ padding:"8px 0", borderRadius:8, fontSize:11, fontFamily:"Georgia,serif", background:editForm.billing_type===bt?GOLD:SURF, color:editForm.billing_type===bt?BG:TEXT, border:`1px solid ${editForm.billing_type===bt?GOLD:BORDER}` }}>{bl}</button>))}</div></div>}
+                    {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.HOURLY && <div><label style={lS}>HOURLY RATE ($)</label><input type="number" value={editForm.hourly_rate} onChange={e=>setEditForm(p=>({...p,hourly_rate:e.target.value}))} style={iS}/></div>}
+                    {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.DAILY && <div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div>}
+                    {editForm.venue_type===VTYPE.GARAGE && editForm.billing_type===BTYPE.MONTHLY && <div><label style={lS}>MONTHLY RATE ($)</label><input type="number" value={editForm.monthly_rate} onChange={e=>setEditForm(p=>({...p,monthly_rate:e.target.value}))} style={iS}/></div>}
+                    {editForm.venue_type===VTYPE.HOTEL && <div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div>}
+                    {editForm.venue_type===VTYPE.AIRPORT && <><div><label style={lS}>DAILY RATE ($)</label><input type="number" value={editForm.daily_rate} onChange={e=>setEditForm(p=>({...p,daily_rate:e.target.value}))} style={iS}/></div><div><label style={lS}>AIRPORT CODE</label><input maxLength={3} value={editForm.airport_code} onChange={e=>setEditForm(p=>({...p,airport_code:e.target.value.toUpperCase()}))} style={iS}/></div></>}
+                    <button className="btn" onClick={saveVenueEdit} style={{ width:"100%", padding:11, borderRadius:9, fontSize:13, fontFamily:"Georgia,serif", background:GOLD, color:BG, fontWeight:600 }}>Save Changes</button>
+                  </div>
+                )}
+                {/* Rate inline editing */}
+                {!editingVenue && v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.HOURLY && (
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>HOURLY: $</div>
                     <input type="number" min="0" step="0.50" defaultValue={v.hourly_rate||0} onBlur={e=>updateVenueField(v.id,{hourly_rate:parseFloat(e.target.value)||0})} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:80, outline:"none" }}/>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>/hr</div>
                   </div>
                 )}
-                {(v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.DAILY) && (
+                {!editingVenue && v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.DAILY && (
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>DAILY: $</div>
                     <input type="number" min="0" step="0.50" defaultValue={v.daily_rate||0} onBlur={e=>updateVenueField(v.id,{daily_rate:parseFloat(e.target.value)||0})} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:80, outline:"none" }}/>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>/day</div>
                   </div>
                 )}
-                {(v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.MONTHLY) && (
+                {!editingVenue && v.venue_type===VTYPE.GARAGE && v.billing_type===BTYPE.MONTHLY && (
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>MONTHLY: $</div>
                     <input type="number" min="0" step="5" defaultValue={v.monthly_rate||0} onBlur={e=>updateVenueField(v.id,{monthly_rate:parseFloat(e.target.value)||0})} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:80, outline:"none" }}/>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>/mo</div>
                   </div>
                 )}
-                {(v.venue_type===VTYPE.HOTEL||v.venue_type===VTYPE.AIRPORT) && (
+                {!editingVenue && (v.venue_type===VTYPE.HOTEL||v.venue_type===VTYPE.AIRPORT) && (
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM }}>DAILY: $</div>
                     <input type="number" min="0" step="0.50" defaultValue={v.daily_rate||0} onBlur={e=>updateVenueField(v.id,{daily_rate:parseFloat(e.target.value)||0})} style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:7, padding:"5px 10px", color:GOLD, fontSize:13, fontFamily:"'IBM Plex Mono',monospace", width:80, outline:"none" }}/>
@@ -358,7 +503,7 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
             ))}
           </div>
         </>}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -386,7 +531,6 @@ export default function App() {
       setLots(built);
     }
     loadLots();
-
     const channel = supabase.channel("lots-changes")
       .on("postgres_changes", { event:"*", schema:"public", table:"lots" }, (payload) => {
         if (payload.eventType==="DELETE") {
@@ -405,7 +549,6 @@ export default function App() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // Resume flight tracking on load
   useEffect(() => {
     async function resumeFlights() {
       const today = new Date().toISOString().split("T")[0];
@@ -484,11 +627,17 @@ export default function App() {
     if(usedBoxes.includes(Number(vForm.box))) { setVError(`Box ${vForm.box} is taken.`); return; }
     if(valetLot[plate]&&valetLot[plate].status!==STATUS.DONE) { setVError("Plate already active."); return; }
     const matched=custUser&&normPlate(custUser.plate)===plate;
+    // Also look up guest from Supabase guests table
+    let guestName = matched ? `${custUser.first} ${custUser.last}` : null;
+    if (!guestName) {
+      const { data:g } = await supabase.from("guests").select("first,last").eq("plate",plate).maybeSingle();
+      if (g) guestName = `${g.first} ${g.last}`;
+    }
     const record = {
       venue_id:valetVenue.id, plate, make:vForm.make, color:vForm.color,
       location:vForm.location||null, box:Number(vForm.box),
       status:STATUS.PARKED, time:now(), date:today(), tip:null, rating:null,
-      customer_name:matched?`${custUser.first} ${custUser.last}`:null,
+      customer_name:guestName,
       valet_name:valetEmployee?valetEmployee.name:null,
       parked_at:new Date().toISOString(),
       hourly_rate:valetVenue.hourly_rate||0,
@@ -504,7 +653,7 @@ export default function App() {
     } catch { setVError("Network error"); return; }
     setVForm({ plate:"", make:"", color:"", location:"", box:"" });
     setVError(""); setBoxSearch(""); setShowBoxPicker(false);
-    flash(`Parked · Box ${vForm.box}${matched?` · ${custUser.first} ${custUser.last}`:""}`);
+    flash(`Parked · Box ${vForm.box}${guestName?` · ${guestName.split(" ")[0]}`:""}`);
   }
 
   async function advance(plate) {
@@ -597,7 +746,6 @@ export default function App() {
         </div>
       )}
 
-      {/* VALET LOGIN */}
       {side==="valet" && valetLoginScreen && !valetEmployee && (
         <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:32 }}>
           <svg width="48" height="48" viewBox="0 0 42 42" fill="none" style={{ marginBottom:14 }}><circle cx="21" cy="21" r="20" stroke={GOLD} strokeWidth="1.5" fill={GOLD2}/><text x="21" y="27" textAnchor="middle" fill={GOLD} fontSize="13" fontFamily="Georgia,serif" fontWeight="bold">P</text></svg>
@@ -633,7 +781,6 @@ export default function App() {
         </div>
       )}
 
-      {/* VALET DASHBOARD */}
       {side==="valet" && (valetEmployee||valetEmployees.length===0) && (
         <div className="fadeUp" style={{ flex:1, padding:16, overflow:"auto" }}>
           <div style={{ marginBottom:14 }}>
@@ -774,7 +921,15 @@ export default function App() {
 function CustomerRegister({ onRegister }) {
   const [reg, setReg] = useState(() => { try { const s=localStorage.getItem("portier_guest"); return s?JSON.parse(s):{first:"",last:"",plate:""}; } catch { return {first:"",last:"",plate:""}; } });
   const ready = reg.first&&reg.last&&reg.plate;
-  function handleRegister(r) { try { localStorage.setItem("portier_guest",JSON.stringify(r)); } catch {} onRegister(r); }
+
+  async function handleRegister(r) {
+    try { localStorage.setItem("portier_guest",JSON.stringify(r)); } catch {}
+    // Save to Supabase guests table
+    const plate = normPlate(r.plate);
+    await supabase.from("guests").upsert({ first:r.first.trim(), last:r.last.trim(), plate }, { onConflict:"plate" });
+    onRegister({...r, plate});
+  }
+
   return (
     <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:28 }}>
       <div style={{ width:"100%", maxWidth:340 }}>
@@ -936,7 +1091,6 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:DIM, marginTop:4 }}>{venue.location}</div>
             </div>
           )}
-
           <div style={{ marginBottom:16 }}>
             <div style={{ fontFamily:"Georgia,serif", fontSize:21 }}>Good evening, <span style={{ color:GOLD }}>{user.first}</span></div>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:4 }}>
@@ -944,7 +1098,6 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, background:`${GREEN}20`, color:GREEN, border:`1px solid ${GREEN}40`, borderRadius:6, padding:"2px 7px" }}>✓ LINKED</div>
             </div>
           </div>
-
           <div style={{ background:SURF, border:`1px solid ${car.status===STATUS.REQUESTED?AMBER+"55":BORDER}`, borderRadius:16, overflow:"hidden", marginBottom:18 }}>
             <div style={{ background:venue?.color||GOLD, padding:"12px 18px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:10, color:"#fff", letterSpacing:2, opacity:.8 }}>YOUR CAR</div>
@@ -970,13 +1123,9 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               )}
             </div>
           </div>
-
-          {/* GARAGE HOURLY CLOCK */}
           {car.venueType===VTYPE.GARAGE && car.billingType===BTYPE.HOURLY && car.hourlyRate>0 && car.status===STATUS.PARKED && (
             <ParkingClock parkedAt={car.parkedAt} rate={car.hourlyRate} label={`$${car.hourlyRate}/hr · billed per hour`}/>
           )}
-
-          {/* GARAGE DAILY — show flat daily rate */}
           {car.venueType===VTYPE.GARAGE && car.billingType===BTYPE.DAILY && car.dailyRate>0 && car.status===STATUS.PARKED && (
             <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:"18px 20px", marginBottom:14, textAlign:"center" }}>
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:10 }}>DAILY RATE</div>
@@ -984,8 +1133,6 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:6 }}>Flat daily rate</div>
             </div>
           )}
-
-          {/* GARAGE MONTHLY */}
           {car.venueType===VTYPE.GARAGE && car.billingType===BTYPE.MONTHLY && car.monthlyRate>0 && car.status===STATUS.PARKED && (
             <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:12, padding:"18px 20px", marginBottom:14, textAlign:"center" }}>
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:10 }}>MONTHLY PERMIT</div>
@@ -993,13 +1140,9 @@ function CustomerHome({ user, custCar, screen, setScreen, tipPick, setTipPick, s
               <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, marginTop:6 }}>per month</div>
             </div>
           )}
-
-          {/* HOTEL DAILY CLOCK */}
           {car.venueType===VTYPE.HOTEL && car.dailyRate>0 && car.status===STATUS.PARKED && (
             <ParkingClock parkedAt={car.parkedAt} rate={car.dailyRate} label={`$${car.dailyRate}/day`}/>
           )}
-
-          {/* AIRPORT FLIGHT CARD */}
           {car.venueType===VTYPE.AIRPORT && car.status===STATUS.PARKED && (
             <FlightCard car={car} venue={venue}/>
           )}
