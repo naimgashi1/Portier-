@@ -593,6 +593,11 @@ export default function App() {
           if (cu && row.plate===normPlate(cu.plate)) {
             if (row.status==="ready") sendNotif("Your car is outside!", "Pull up to the entrance.");
             if (row.status==="enroute") sendNotif("Your car is on the way!", "Your valet is bringing your car out now.");
+            if (row.status==="done") {
+              const bill = row.billing_amount||0;
+              if (bill>0) setPaymentScreen({amount:bill});
+              else setCustScreen("tip");
+            }
           }
           if (vv && row.venue_id===vv.id && row.status==="requested") sendNotif("Guest heading out!", `${row.plate} — ${row.customer_name||"Guest"} is ready.`);
           setLots(prev => ({ ...prev, [row.venue_id]:{ ...(prev[row.venue_id]||{}), [row.plate]:rowToCar(row) } }));
@@ -668,16 +673,7 @@ export default function App() {
   const lastCarRef = useRef(null);
   if (custCar) lastCarRef.current = custCar;
 
-  const prevStatusRef = useRef(null);
-  useEffect(() => {
-    const currentStatus = custCar?.car?.status;
-    if (prevStatusRef.current !== STATUS.DONE && currentStatus === STATUS.DONE) {
-      const bill = lastCarRef.current?.car?.billingAmount||0;
-      if(bill>0) setPaymentScreen({amount:bill});
-      else setCustScreen("tip");
-    }
-    if (currentStatus) prevStatusRef.current = currentStatus;
-  }, [custCar?.car?.status]);
+
   useEffect(() => {
     if(!custUser) return;
     const plate=normPlate(custUser.plate);
