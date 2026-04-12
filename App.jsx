@@ -65,7 +65,7 @@ function rowToCar(row) {
     tip:row.tip, rating:row.rating, valetName:row.valet_name,
     parkedAt:row.parked_at, hourlyRate:row.hourly_rate||0, dailyRate:row.daily_rate||0, monthlyRate:row.monthly_rate||0,
     venueType:row.venue_type||"restaurant", billingType:row.billing_type||"hourly",
-    billingAmount:row.billing_amount||0, returnDate:row.return_date||null,
+    returnFlight:row.return_flight||null, returnDate:row.return_date||null,
     flightStatus:row.flight_status||null, arrivalTime:row.arrival_time||null,
   };
 }
@@ -659,7 +659,7 @@ export default function App() {
   const custCar = custUser ? (() => {
     const plate = normPlate(custUser.plate);
     for (const vid of Object.keys(lots)) {
-      if (lots[vid][plate] && lots[vid][plate].status!==STATUS.DONE) return { car:lots[vid][plate], venue:venues.find(v=>v.id===vid) };
+      if (lots[vid][plate]) return { car:lots[vid][plate], venue:venues.find(v=>v.id===vid) };
     }
     return null;
   })() : null;
@@ -725,9 +725,15 @@ export default function App() {
     await supabase.from("lots").update(upd).eq("venue_id",valetVenue.id).eq("plate",plate);
   }
 
-  async function confirmRetrieve(plate, tip) {     if(!valetVenue) return;     const car = valetLot[plate];     const hours = car?.parkedAt ? Math.max(1, Math.ceil((Date.now()-new Date(car.parkedAt))/3600000)) : 1;     const bill = valetVenue.venue_type==="restaurant" ? 0 :       valetVenue.billing_type==="hourly" ? hours*(valetVenue.hourly_rate||0) :       valetVenue.billing_type==="daily" ? (valetVenue.daily_rate||0) :       valetVenue.billing_type==="monthly" ? (valetVenue.monthly_rate||0) : 0;     await supabase.from("lots").update({status:STATUS.DONE, tip, billing_amount:bill}).eq("venue_id",valetVenue.id).eq("plate",plate);
+  async function confirmRetrieve(plate, tip) {
     if(!valetVenue) return;
-    await supabase.from("lots").update({status:STATUS.DONE,tip}).eq("venue_id",valetVenue.id).eq("plate",plate);
+    const car = valetLot[plate];
+    const hours = car?.parkedAt ? Math.max(1, Math.ceil((Date.now()-new Date(car.parkedAt))/3600000)) : 1;
+    const bill = valetVenue.venue_type==="restaurant" ? 0 :
+      valetVenue.billing_type==="hourly" ? hours*(valetVenue.hourly_rate||0) :
+      valetVenue.billing_type==="daily" ? (valetVenue.daily_rate||0) :
+      valetVenue.billing_type==="monthly" ? (valetVenue.monthly_rate||0) : 0;
+    await supabase.from("lots").update({status:STATUS.DONE, tip, billing_amount:bill}).eq("venue_id",valetVenue.id).eq("plate",plate);
     setTipModal(null); flash(`${plate} retrieved${tip?` · $${tip} tip`:""}`);
   }
 
