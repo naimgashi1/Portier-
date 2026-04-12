@@ -3,7 +3,16 @@ import { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 const SUPABASE_URL = "https://yvxsmrsmurkxierjjhfp.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl2eHNtcnNtdXJreGllcmpqaGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NjM3ODcsImV4cCI6MjA5MTIzOTc4N30.gzFkyo-neUh2UMwpikdDVWt0lktq_MkJ_JuRy_Swv4c";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY); const STRIPE_PK = "pk_test_51TLGPyAg0w0DFBv79E3WGNRrABRRDwcM40PHJULipryTle3PaWVY8xkOuYHCRIxALIkC1Y2uAlQMDEzAjoi667MB00yJLJZPyG"; let _stripe = null; async function getStripe() {   if (!_stripe) {     if (!window.Stripe) await new Promise(r=>{ const s=document.createElement('script'); s.src='https://js.stripe.com/v3/'; s.onload=r; document.head.appendChild(s); });     _stripe = window.Stripe(STRIPE_PK);   }   return _stripe; }
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const STRIPE_PK = "pk_test_51TLGPyAg0w0DFBv79E3WGNRrABRRDwcM40PHJULipryTle3PaWVY8xkOuYHCRIxALIkC1Y2uAlQMDEzAjoi667MB00yJLJZPyG";
+let _stripe = null;
+async function getStripe() {
+  if (!_stripe) {
+    if (!window.Stripe) await new Promise(r=>{ const s=document.createElement('script'); s.src='https://js.stripe.com/v3/'; s.onload=r; document.head.appendChild(s); });
+    _stripe = window.Stripe(STRIPE_PK);
+  }
+  return _stripe;
+}
 const RAPIDAPI_KEY = "8924482762mshd2d068b1bc7e68fp160893jsn28d29540805b";
 
 function sendNotif(title, body) {
@@ -517,7 +526,7 @@ export default function App() {
   const custUserRef = useRef(null);
   const valetVenueRef = useRef(null);
 
-  useEffect(() => {   requestNotifPermission();   if ("serviceWorker" in navigator) {     navigator.serviceWorker.register("/sw.js").catch(err => console.log("SW error:", err));   } }, []);
+  useEffect(() => { requestNotifPermission(); }, []);
 
   useEffect(() => {
     async function loadLots() {
@@ -582,7 +591,8 @@ export default function App() {
   const [valetCompanies, setValetCompanies] = useState([]);
   const [valetEmployees, setValetEmployees] = useState([]);
   const [notif, setNotif] = useState(null);
-  const notifRef = useRef();   const [paymentScreen, setPaymentScreen] = useState(null);
+  const notifRef = useRef();
+  const [paymentScreen, setPaymentScreen] = useState(null);
 
   useEffect(() => { custUserRef.current = custUser; }, [custUser]);
   useEffect(() => { valetVenueRef.current = valetVenue; }, [valetVenue]);
@@ -611,7 +621,13 @@ export default function App() {
     return null;
   })() : null;
 
-  useEffect(() => { if(custCar?.car.status===STATUS.DONE&&custScreen==="home") {     const bill = custCar?.car?.billingAmount||0;     if(bill>0) setPaymentScreen({amount:bill});     else setCustScreen("tip");   } }, [custCar?.car.status]);
+  useEffect(() => {
+  if(custCar?.car.status===STATUS.DONE&&custScreen==="home") {
+    const bill = custCar?.car?.billingAmount||0;
+    if(bill>0) setPaymentScreen({amount:bill});
+    else setCustScreen("tip");
+  }
+}, [custCar?.car.status]);
   useEffect(() => {
     if(!custUser) return;
     const plate=normPlate(custUser.plate);
@@ -912,13 +928,71 @@ export default function App() {
         </div>
       )}
 
-      {side==="customer" && !custUser && {side==="customer" && !custUser && <CustomerRegister onRegister={setCustUser}/>}       {side==="customer" && custUser && paymentScreen && (         <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:28 }}>           <div style={{ width:"100%", maxWidth:340 }}>             <div style={{ fontFamily:"Georgia,serif", fontSize:22, marginBottom:6, textAlign:"center" }}>Time to pay</div>             <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, marginBottom:24, textAlign:"center" }}>Your parking session has ended</div>             <StripePaymentCard amount={paymentScreen.amount}               onSuccess={async(pmId, amt)=>{                 await supabase.from("guests").update({stripe_pm_id:pmId}).eq("plate",normPlate(custUser.plate));                 setPaymentScreen(null); setCustScreen("tip");               }}               onSkip={()=>{ setPaymentScreen(null); setCustScreen("tip"); }}             />           </div>         </div>       )}       {side==="customer" && custUser && !paymentScreen && <CustomerHome}
-      {side==="customer" && custUser && <CustomerHome user={custUser} custCar={custCar} screen={custScreen} setScreen={setCustScreen} tipPick={tipPick} setTipPick={setTipPick} stars={stars} setStars={setStars} hover={hover} setHover={setHover} onRequest={custRequest}/>}
+      {side==="customer" && !custUser && <CustomerRegister onRegister={setCustUser}/>}
+      {side==="customer" && custUser && paymentScreen && (
+        <div className="fadeUp" style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:28 }}>
+          <div style={{ width:"100%", maxWidth:340 }}>
+            <div style={{ fontFamily:"Georgia,serif", fontSize:22, marginBottom:6, textAlign:"center" }}>Time to pay</div>
+            <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:11, color:DIM, marginBottom:24, textAlign:"center" }}>Your parking session has ended</div>
+            <StripePaymentCard amount={paymentScreen.amount}
+              onSuccess={async(pmId)=>{
+                await supabase.from("guests").update({stripe_pm_id:pmId}).eq("plate",normPlate(custUser.plate));
+                setPaymentScreen(null); setCustScreen("tip");
+              }}
+              onSkip={()=>{ setPaymentScreen(null); setCustScreen("tip"); }}
+            />
+          </div>
+        </div>
+      )}
+      {side==="customer" && custUser && !paymentScreen && <CustomerHome user={custUser} custCar={custCar} screen={custScreen} setScreen={setCustScreen} tipPick={tipPick} setTipPick={setTipPick} stars={stars} setStars={setStars} hover={hover} setHover={setHover} onRequest={custRequest}/>}
     </div>
   );
 }
 
-function StripePaymentCard({ amount, onSuccess, onSkip }) {   const mountRef = useRef(null);   const [card, setCard] = useState(null);   const [loading, setLoading] = useState(false);   const [err, setErr] = useState("");   const [ready, setReady] = useState(false);    useEffect(() => {     let c;     getStripe().then(s => {       const els = s.elements();       c = els.create('card', { style:{ base:{ color:"#EDE8DC", fontFamily:"'IBM Plex Mono',monospace", fontSize:"15px", "::placeholder":{ color:"#7A7060" } }, invalid:{ color:"#B85A5A" } } });       c.mount(mountRef.current);       c.on('ready', ()=>setReady(true));       c.on('change', e=>setErr(e.error?.message||""));       setCard(c);     });     return ()=>c?.destroy();   }, []);    async function handlePay() {     setLoading(true); setErr("");     const s = await getStripe();     const { paymentMethod, error } = await s.createPaymentMethod({ type:"card", card });     if (error) { setErr(error.message); setLoading(false); return; }     onSuccess(paymentMethod.id, amount);   }    return (     <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:14, padding:20, marginBottom:14 }}>       <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:6 }}>PARKING CHARGE</div>       <div style={{ fontFamily:"Georgia,serif", fontSize:36, color:GREEN, marginBottom:16 }}>${Number(amount).toFixed(2)}</div>       <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1, marginBottom:8 }}>CARD DETAILS</div>       <div style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:9, padding:"14px", marginBottom:8 }} ref={mountRef}/>       {err && <div style={{ color:RED, fontSize:11, fontFamily:"'IBM Plex Mono',monospace", marginBottom:8 }}>{err}</div>}       <button className="btn" onClick={handlePay} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready&&!loading?GOLD:FAINT, color:ready&&!loading?BG:DIM, fontWeight:600, marginBottom:8 }}>         {loading?"Processing…":`Pay $${Number(amount).toFixed(2)}`}       </button>       <button className="btn" onClick={onSkip} style={{ width:"100%", padding:10, borderRadius:10, fontSize:12, color:DIM, fontFamily:"'IBM Plex Mono',monospace" }}>Pay at venue instead</button>     </div>   ); }
+function StripePaymentCard({ amount, onSuccess, onSkip }) {
+  const mountRef = useRef(null);
+  const [card, setCard] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let c;
+    getStripe().then(s => {
+      const els = s.elements();
+      c = els.create('card', { style:{ base:{ color:"#EDE8DC", fontFamily:"'IBM Plex Mono',monospace", fontSize:"15px", "::placeholder":{ color:"#7A7060" } }, invalid:{ color:"#B85A5A" } } });
+      c.mount(mountRef.current);
+      c.on('ready', ()=>setReady(true));
+      c.on('change', e=>setErr(e.error?.message||""));
+      setCard(c);
+    });
+    return ()=>c?.destroy();
+  }, []);
+
+  async function handlePay() {
+    setLoading(true); setErr("");
+    const s = await getStripe();
+    const { paymentMethod, error } = await s.createPaymentMethod({ type:"card", card });
+    if (error) { setErr(error.message); setLoading(false); return; }
+    onSuccess(paymentMethod.id, amount);
+  }
+
+  return (
+    <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:14, padding:20, marginBottom:14 }}>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:6 }}>PARKING CHARGE</div>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:36, color:GREEN, marginBottom:16 }}>${Number(amount).toFixed(2)}</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1, marginBottom:8 }}>CARD DETAILS</div>
+      <div style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:9, padding:"14px", marginBottom:8 }} ref={mountRef}/>
+      {err && <div style={{ color:RED, fontSize:11, fontFamily:"'IBM Plex Mono',monospace", marginBottom:8 }}>{err}</div>}
+      <button className="btn" onClick={handlePay} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready&&!loading?GOLD:FAINT, color:ready&&!loading?BG:DIM, fontWeight:600, marginBottom:8 }}>
+        {loading?"Processing…":`Pay $${Number(amount).toFixed(2)}`}
+      </button>
+      <button className="btn" onClick={onSkip} style={{ width:"100%", padding:10, borderRadius:10, fontSize:12, color:DIM, fontFamily:"'IBM Plex Mono',monospace" }}>Pay at venue instead</button>
+    </div>
+  );
+}
+
+function CustomerRegister({ onRegister }) {
   const [reg, setReg] = useState(() => { try { const s=localStorage.getItem("portier_guest"); return s?JSON.parse(s):{first:"",last:"",plate:""}; } catch { return {first:"",last:"",plate:""}; } });
   const ready = reg.first&&reg.last&&reg.plate;
 
