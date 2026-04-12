@@ -665,12 +665,12 @@ export default function App() {
   })() : null;
 
   useEffect(() => {
-  if(custCar?.car.status===STATUS.DONE&&custScreen==="home") {
-    const bill = custCar?.car?.billingAmount||0;
-    if(bill>0) setPaymentScreen({amount:bill});
-    else setCustScreen("tip");
-  }
-}, [custCar?.car.status]);
+    if(custCar?.car.status===STATUS.DONE&&custScreen==="home") {
+      const bill = custCar?.car?.billingAmount||0;
+      if(bill>0) setPaymentScreen({amount:bill});
+      else setCustScreen("tip");
+    }
+  }, [custCar?.car.status]);
   useEffect(() => {
     if(!custUser) return;
     const plate=normPlate(custUser.plate);
