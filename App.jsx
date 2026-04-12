@@ -659,18 +659,25 @@ export default function App() {
   const custCar = custUser ? (() => {
     const plate = normPlate(custUser.plate);
     for (const vid of Object.keys(lots)) {
-      if (lots[vid][plate]) return { car:lots[vid][plate], venue:venues.find(v=>v.id===vid) };
+      if (lots[vid][plate] && lots[vid][plate].status!==STATUS.DONE) return { car:lots[vid][plate], venue:venues.find(v=>v.id===vid) };
     }
     return null;
   })() : null;
 
+  // Track last active car so we can access billing amount when car becomes DONE
+  const lastCarRef = useRef(null);
+  if (custCar) lastCarRef.current = custCar;
+
+  const prevStatusRef = useRef(null);
   useEffect(() => {
-    if(custCar?.car.status===STATUS.DONE&&custScreen==="home") {
-      const bill = custCar?.car?.billingAmount||0;
+    const currentStatus = custCar?.car?.status;
+    if (prevStatusRef.current !== STATUS.DONE && currentStatus === STATUS.DONE) {
+      const bill = lastCarRef.current?.car?.billingAmount||0;
       if(bill>0) setPaymentScreen({amount:bill});
       else setCustScreen("tip");
     }
-  }, [custCar?.car.status]);
+    if (currentStatus) prevStatusRef.current = currentStatus;
+  }, [custCar?.car?.status]);
   useEffect(() => {
     if(!custUser) return;
     const plate=normPlate(custUser.plate);
