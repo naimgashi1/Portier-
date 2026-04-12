@@ -517,6 +517,49 @@ function AdminDashboard({ venues, setVenues, valetCompanies, setValetCompanies, 
   );
 }
 
+function StripePaymentCard({ amount, onSuccess, onSkip }) {
+  const mountRef = useRef(null);
+  const [card, setCard] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let c;
+    getStripe().then(s => {
+      const els = s.elements();
+      c = els.create('card', { style:{ base:{ color:"#EDE8DC", fontFamily:"'IBM Plex Mono',monospace", fontSize:"15px", "::placeholder":{ color:"#7A7060" } }, invalid:{ color:"#B85A5A" } } });
+      c.mount(mountRef.current);
+      c.on('ready', ()=>setReady(true));
+      c.on('change', e=>setErr(e.error?.message||""));
+      setCard(c);
+    });
+    return ()=>c?.destroy();
+  }, []);
+
+  async function handlePay() {
+    setLoading(true); setErr("");
+    const s = await getStripe();
+    const { paymentMethod, error } = await s.createPaymentMethod({ type:"card", card });
+    if (error) { setErr(error.message); setLoading(false); return; }
+    onSuccess(paymentMethod.id, amount);
+  }
+
+  return (
+    <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:14, padding:20, marginBottom:14 }}>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:6 }}>PARKING CHARGE</div>
+      <div style={{ fontFamily:"Georgia,serif", fontSize:36, color:GREEN, marginBottom:16 }}>${Number(amount).toFixed(2)}</div>
+      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1, marginBottom:8 }}>CARD DETAILS</div>
+      <div style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:9, padding:"14px", marginBottom:8 }} ref={mountRef}/>
+      {err && <div style={{ color:RED, fontSize:11, fontFamily:"'IBM Plex Mono',monospace", marginBottom:8 }}>{err}</div>}
+      <button className="btn" onClick={handlePay} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready&&!loading?GOLD:FAINT, color:ready&&!loading?BG:DIM, fontWeight:600, marginBottom:8 }}>
+        {loading?"Processing…":`Pay $${Number(amount).toFixed(2)}`}
+      </button>
+      <button className="btn" onClick={onSkip} style={{ width:"100%", padding:10, borderRadius:10, fontSize:12, color:DIM, fontFamily:"'IBM Plex Mono',monospace" }}>Pay at venue instead</button>
+    </div>
+  );
+}
+
 export default function App() {
   const [side, setSide] = useState("customer");
   const [adminPinInput, setAdminPinInput] = useState("");
@@ -945,49 +988,6 @@ export default function App() {
         </div>
       )}
       {side==="customer" && custUser && !paymentScreen && <CustomerHome user={custUser} custCar={custCar} screen={custScreen} setScreen={setCustScreen} tipPick={tipPick} setTipPick={setTipPick} stars={stars} setStars={setStars} hover={hover} setHover={setHover} onRequest={custRequest}/>}
-    </div>
-  );
-}
-
-function StripePaymentCard({ amount, onSuccess, onSkip }) {
-  const mountRef = useRef(null);
-  const [card, setCard] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    let c;
-    getStripe().then(s => {
-      const els = s.elements();
-      c = els.create('card', { style:{ base:{ color:"#EDE8DC", fontFamily:"'IBM Plex Mono',monospace", fontSize:"15px", "::placeholder":{ color:"#7A7060" } }, invalid:{ color:"#B85A5A" } } });
-      c.mount(mountRef.current);
-      c.on('ready', ()=>setReady(true));
-      c.on('change', e=>setErr(e.error?.message||""));
-      setCard(c);
-    });
-    return ()=>c?.destroy();
-  }, []);
-
-  async function handlePay() {
-    setLoading(true); setErr("");
-    const s = await getStripe();
-    const { paymentMethod, error } = await s.createPaymentMethod({ type:"card", card });
-    if (error) { setErr(error.message); setLoading(false); return; }
-    onSuccess(paymentMethod.id, amount);
-  }
-
-  return (
-    <div style={{ background:CARD, border:`1px solid ${BORDER}`, borderRadius:14, padding:20, marginBottom:14 }}>
-      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:2, marginBottom:6 }}>PARKING CHARGE</div>
-      <div style={{ fontFamily:"Georgia,serif", fontSize:36, color:GREEN, marginBottom:16 }}>${Number(amount).toFixed(2)}</div>
-      <div style={{ fontFamily:"'IBM Plex Mono',monospace", fontSize:9, color:DIM, letterSpacing:1, marginBottom:8 }}>CARD DETAILS</div>
-      <div style={{ background:BG, border:`1px solid ${BORDER}`, borderRadius:9, padding:"14px", marginBottom:8 }} ref={mountRef}/>
-      {err && <div style={{ color:RED, fontSize:11, fontFamily:"'IBM Plex Mono',monospace", marginBottom:8 }}>{err}</div>}
-      <button className="btn" onClick={handlePay} style={{ width:"100%", padding:14, borderRadius:10, fontSize:15, fontFamily:"Georgia,serif", background:ready&&!loading?GOLD:FAINT, color:ready&&!loading?BG:DIM, fontWeight:600, marginBottom:8 }}>
-        {loading?"Processing…":`Pay $${Number(amount).toFixed(2)}`}
-      </button>
-      <button className="btn" onClick={onSkip} style={{ width:"100%", padding:10, borderRadius:10, fontSize:12, color:DIM, fontFamily:"'IBM Plex Mono',monospace" }}>Pay at venue instead</button>
     </div>
   );
 }
